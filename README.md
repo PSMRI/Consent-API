@@ -150,15 +150,14 @@ Error codes (additive only; never renamed or reused):
 | 422 | `OTP_EXPIRED`, `OTP_INVALID`, `EVIDENCE_HASH_MISMATCH` (also `BUSINESS_RULE_VIOLATION`) |
 | 503 | `DEPENDENCY_UNAVAILABLE` |
 
-The full contracts are in
-[specs/001-service-skeleton/contracts/](specs/001-service-skeleton/contracts/consent-api-skeleton.openapi.yaml)
-and [specs/002-mmu-consent-capture/contracts/](specs/002-mmu-consent-capture/contracts/consent-capture.openapi.yaml).
+The full API description is served by Swagger UI at `/swagger-ui.html` (and `/v3/api-docs`)
+when `springdoc.swagger-ui.enabled=true`.
 
 ## Database
 
 `cm_` tables in `db_identity` come from AMRIT-DB migration
-`dbidentity/V30__Consent_Manager_Capture.sql` and (doctor access grants)
-`dbidentity/V33__Consent_Access_Grant.sql`. Demo notice and purpose text (placeholders,
+`dbidentity/V33__Consent_Manager_Capture.sql` and (doctor access grants)
+`dbidentity/V34__Consent_Access_Grant.sql`. Demo notice and purpose text (placeholders,
 `TODO-LEGAL`) is a manual script for dev/demo databases only:
 `AMRIT-DB/src/main/resources/db/consent_demo/01_consent_demo_seed.sql`.
 
@@ -168,7 +167,6 @@ and [specs/002-mmu-consent-capture/contracts/](specs/002-mmu-consent-capture/con
   with `git config core.hooksPath .git-hooks`; never use `--no-verify`.
 - Code must pass `checkstyle.xml`, and new code needs at least 99 % line and branch coverage
   with mock-based tests (no real database or Redis).
-- Every change follows the project constitution: `.specify/memory/constitution.md`.
 
 ## License
 

@@ -53,8 +53,7 @@ import io.swagger.v3.oas.models.security.SecurityRequirement;
 import io.swagger.v3.oas.models.security.SecurityScheme;
 
 /**
- * API documentation (FR-021, SC-007, research R11), matching
- * {@code specs/001-service-skeleton/contracts/consent-api-skeleton.openapi.yaml}.
+ * API documentation (FR-021, SC-007, research R11).
  *
  * <ul>
  * <li>Three login schemes so Swagger UI's "Authorize" works: {@code JwtToken} header,

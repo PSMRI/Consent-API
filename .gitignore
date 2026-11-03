@@ -1,4 +1,3 @@
-.claude/settings.local.json
 
 # Build output
 target/
@@ -25,3 +24,9 @@ src/main/environment/common_local.properties
 # OS
 .DS_Store
 Thumbs.db
+
+# Spec Kit and Claude Code working files (kept locally, not in the repo)
+.claude/
+.specify/
+specs/
+CLAUDE.md
