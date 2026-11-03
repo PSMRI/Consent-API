@@ -1,0 +1,447 @@
+openapi: 3.0.3
+info:
+  title: Consent-API — patient consent management (preference centre)
+  version: 0.3.0
+  description: |
+    Feature 003 endpoints (front-end APIs 8–14, plus the doctor's access request).
+    Every response uses the standard ApiResponse body from feature 001 (`success`,
+    `statusCode` = HTTP status, `message`, `data`, `error{code, purposeCode, details}`,
+    `timestamp`, `traceId`). Only `data` is described per endpoint below.
+    All endpoints need the AMRIT login. Writes need an `Idempotency-Key` (UUID). A repeat with
+    the same key and request changes nothing and creates no record; it returns the original
+    status with: the original grant (access request), the patient's current consents
+    (preferences, withdrawals), or the grant's current state (approve, revoke). The same key
+    with a different body, or for a different patient or grant, is 409 STATE_CONFLICT.
+servers:
+  - url: http://localhost:8095
+security:
+  - JwtTokenHeader: []
+  - JwtTokenCookie: []
+  - SessionAuthorization: []
+
+paths:
+  /consent/v1/principals/{benRegId}/consents:
+    get:
+      summary: Patient's current consents and history (front-end API 8)
+      parameters:
+        - $ref: '#/components/parameters/BenRegId'
+      responses:
+        '200':
+          description: Consents (both lists empty for a patient with no consent)
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - properties:
+                      data: { $ref: '#/components/schemas/PatientConsents' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/OriginNotAllowed' }
+        '500': { $ref: '#/components/responses/InternalError' }
+        '503': { $ref: '#/components/responses/DependencyUnavailable' }
+
+  /consent/v1/principals/{benRegId}/pending-actions:
+    get:
+      summary: Consent actions still needed for a patient (front-end API 9)
+      parameters:
+        - $ref: '#/components/parameters/BenRegId'
+        - name: context
+          in: query
+          required: false
+          description: Which active notice defines the purposes needed (default REGISTRATION)
+          schema: { type: string, enum: [REGISTRATION, REVISIT], default: REGISTRATION }
+      responses:
+        '200':
+          description: Pending actions (empty = nothing to do, H3)
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/PendingAction' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/OriginNotAllowed' }
+        '500': { $ref: '#/components/responses/InternalError' }
+        '503': { $ref: '#/components/responses/DependencyUnavailable' }
+
+  /consent/v1/principals/{benRegId}/preferences:
+    post:
+      summary: Change one or more purposes to GRANT or DENY (front-end API 10)
+      parameters:
+        - $ref: '#/components/parameters/BenRegId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PreferenceRequest' }
+      responses:
+        '200':
+          description: Updated consents (same shape as API 8)
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - properties:
+                      data: { $ref: '#/components/schemas/PatientConsents' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/OriginNotAllowed' }
+        '409':
+          description: |
+            STALE_VERSION — a version in `versions` is not the current one (C20).
+            STATE_CONFLICT — decision equals the current status, or request key reused with a
+            different body or for a different patient.
+        '422':
+          description: |
+            PURPOSE_NOT_WITHDRAWABLE (`error.purposeCode`) — DENY of a granted purpose that
+            cannot be withdrawn.
+            BUSINESS_RULE_VIOLATION (`error.purposeCode`) — no current decision for the purpose,
+            or GRANT of a purpose that needs re-consent / is expired / has a newer material
+            notice (use the full consent screen).
+            OTP_INVALID / OTP_EXPIRED — GRANT without a usable OTP challenge for this patient.
+        '500': { $ref: '#/components/responses/InternalError' }
+        '503': { $ref: '#/components/responses/DependencyUnavailable' }
+
+  /consent/v1/principals/{benRegId}/withdrawals:
+    post:
+      summary: Withdraw purposes or ALL (front-end API 11)
+      parameters:
+        - $ref: '#/components/parameters/BenRegId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/WithdrawalRequest' }
+      responses:
+        '200':
+          description: Updated consents, plus the purposes `ALL` left unchanged
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - properties:
+                      data: { $ref: '#/components/schemas/WithdrawalResult' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/OriginNotAllowed' }
+        '409':
+          description: |
+            STALE_VERSION — a version is not the current one, or a purpose that `ALL` would
+            withdraw is missing from `versions`.
+            STATE_CONFLICT — a named purpose is not currently GRANTED, `ALL` finds nothing to
+            withdraw, or request key reused with a different body or for a different patient / grant.
+        '422':
+          description: |
+            PURPOSE_NOT_WITHDRAWABLE (`error.purposeCode`) — a named purpose cannot be
+            withdrawn (C12); nothing is changed.
+            BUSINESS_RULE_VIOLATION (`error.purposeCode`) — no current decision for the purpose.
+        '500': { $ref: '#/components/responses/InternalError' }
+        '503': { $ref: '#/components/responses/DependencyUnavailable' }
+
+  /consent/v1/principals/{benRegId}/access-grants:
+    get:
+      summary: Patient's access grants (front-end API 12)
+      parameters:
+        - $ref: '#/components/parameters/BenRegId'
+        - name: status
+          in: query
+          required: false
+          description: Comma-separated statuses; omitted = all. EXPIRED matches grants past valid-until.
+          schema: { type: string, example: 'ACTIVE,PENDING' }
+      responses:
+        '200':
+          description: Grants, newest first
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/AccessGrant' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/OriginNotAllowed' }
+        '500': { $ref: '#/components/responses/InternalError' }
+        '503': { $ref: '#/components/responses/DependencyUnavailable' }
+
+  /consent/v1/access-grants:
+    post:
+      summary: Doctor requests time-limited access to a patient (clarification 2)
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AccessRequest' }
+      responses:
+        '201':
+          description: PENDING grant; the grantee is the logged-in user
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - properties:
+                      data: { $ref: '#/components/schemas/AccessGrant' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/OriginNotAllowed' }
+        '409': { description: STATE_CONFLICT — request key reused with a different body or for a different patient / grant }
+        '500': { $ref: '#/components/responses/InternalError' }
+        '503': { $ref: '#/components/responses/DependencyUnavailable' }
+
+  /consent/v1/access-grants/{grantId}/approve:
+    post:
+      summary: Patient or guardian approves a pending grant by OTP (front-end API 13)
+      parameters:
+        - $ref: '#/components/parameters/GrantId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [otpChallengeId]
+              properties:
+                otpChallengeId:
+                  type: string
+                  format: uuid
+                  description: From API 4 with purpose ACCESS_GRANT and refId = grantId
+      responses:
+        '200':
+          description: The grant, now ACTIVE
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - properties:
+                      data: { $ref: '#/components/schemas/AccessGrant' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/OriginNotAllowed' }
+        '404': { description: NOT_FOUND — no such grant }
+        '409': { description: 'STATE_CONFLICT — grant not PENDING, is BREAK_GLASS, or request key reused with a different body or for a different patient / grant' }
+        '422': { description: 'OTP_INVALID / OTP_EXPIRED — challenge not verified, used, for another grant, or (guardian case) another phone' }
+        '500': { $ref: '#/components/responses/InternalError' }
+        '503': { $ref: '#/components/responses/DependencyUnavailable' }
+
+  /consent/v1/access-grants/{grantId}/revoke:
+    post:
+      summary: Cancel a pending or active grant (front-end API 14)
+      parameters:
+        - $ref: '#/components/parameters/GrantId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, description: 'Empty object {}' }
+      responses:
+        '200':
+          description: The grant, now REVOKED
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - properties:
+                      data: { $ref: '#/components/schemas/AccessGrant' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/OriginNotAllowed' }
+        '404': { description: NOT_FOUND — no such grant }
+        '409': { description: 'STATE_CONFLICT — grant already REVOKED or EXPIRED, or request key reused with a different body or for a different patient / grant' }
+        '500': { $ref: '#/components/responses/InternalError' }
+        '503': { $ref: '#/components/responses/DependencyUnavailable' }
+
+components:
+  securitySchemes:
+    JwtTokenHeader: { type: apiKey, in: header, name: JwtToken }
+    JwtTokenCookie: { type: apiKey, in: cookie, name: Jwttoken }
+    SessionAuthorization: { type: apiKey, in: header, name: Authorization }
+
+  parameters:
+    BenRegId:
+      name: benRegId
+      in: path
+      required: true
+      schema: { type: integer, format: int64, minimum: 1 }
+    GrantId:
+      name: grantId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema: { type: string, format: uuid }
+
+  responses:
+    ValidationFailed: { description: 'VALIDATION_FAILED / MALFORMED_REQUEST' }
+    Unauthenticated: { description: 'UNAUTHENTICATED / SESSION_EXPIRED' }
+    OriginNotAllowed: { description: ORIGIN_NOT_ALLOWED }
+    InternalError: { description: INTERNAL_ERROR }
+    DependencyUnavailable: { description: 'DEPENDENCY_UNAVAILABLE — database or Redis' }
+
+  schemas:
+    ApiResponse:
+      $ref: '../../001-service-skeleton/contracts/consent-api-skeleton.openapi.yaml#/components/schemas/ApiResponse'
+
+    PurposeStatus:
+      type: string
+      enum: [GRANTED, DENIED, WITHDRAWN, EXPIRED, RECONSENT_REQUIRED, SUPERSEDED]
+
+    CurrentDecision:
+      type: object
+      properties:
+        purposeCode: { type: string, example: P-REM }
+        name: { type: string }
+        isMandatory: { type: boolean }
+        isWithdrawable: { type: boolean }
+        status: { $ref: '#/components/schemas/PurposeStatus' }
+        validUntil: { type: string, format: date-time, nullable: true }
+        versionNo: { type: integer, minimum: 1 }
+
+    ConsentEvent:
+      type: object
+      properties:
+        consentId: { type: string, format: uuid }
+        eventType: { type: string, enum: [NEW, UPDATE, RENEWAL, WITHDRAWAL, LEGACY] }
+        consentingParty: { type: string, enum: [SELF, GUARDIAN] }
+        noticeVersionId: { type: integer, format: int64 }
+        languageCode: { type: string }
+        mode: { type: string, nullable: true, enum: [SELF_READ, READ_ALOUD, VOICE_CLIP, WITNESSED, SIGNATURE_PHOTO, OTP] }
+        capturedBy: { type: integer, format: int64 }
+        capturedAt: { type: string, format: date-time }
+        facilityId: { type: integer, nullable: true }
+        serviceLine: { type: string, nullable: true }
+        deviceId: { type: string }
+        syncStatus: { type: string, enum: [SYNCED, NOT_SYNCED] }
+        purposes:
+          type: array
+          items:
+            type: object
+            properties:
+              purposeCode: { type: string }
+              status: { $ref: '#/components/schemas/PurposeStatus' }
+              versionNo: { type: integer }
+
+    PatientConsents:
+      type: object
+      properties:
+        current:
+          type: array
+          items: { $ref: '#/components/schemas/CurrentDecision' }
+        history:
+          type: array
+          description: Newest first
+          items: { $ref: '#/components/schemas/ConsentEvent' }
+
+    WithdrawalResult:
+      allOf:
+        - $ref: '#/components/schemas/PatientConsents'
+        - type: object
+          properties:
+            notWithdrawn:
+              type: array
+              description: With ALL — granted purposes left unchanged because they cannot be withdrawn
+              items: { type: string }
+
+    PendingAction:
+      type: object
+      properties:
+        reason: { type: string, enum: [CONSENT_MISSING, LEGACY, RECONSENT_REQUIRED, GUARDIAN_TO_SELF] }
+        purposeCodes: { type: array, items: { type: string } }
+        dueSince: { type: string, format: date-time, nullable: true }
+
+    Versions:
+      type: object
+      description: Version last seen per purpose code
+      additionalProperties: { type: integer, minimum: 1 }
+      example: { P-REM: 2 }
+
+    ContextFields:
+      type: object
+      properties:
+        deviceId: { type: string, maxLength: 100, nullable: true }
+        facilityId: { type: integer, nullable: true }
+        providerServiceMapId: { type: integer, nullable: true }
+        serviceLine: { type: string, maxLength: 30, nullable: true }
+
+    PreferenceRequest:
+      allOf:
+        - $ref: '#/components/schemas/ContextFields'
+        - type: object
+          required: [purposeCodes, decision, versions]
+          properties:
+            purposeCodes: { type: array, minItems: 1, maxItems: 50, uniqueItems: true, items: { type: string } }
+            decision: { type: string, enum: [GRANT, DENY] }
+            versions: { $ref: '#/components/schemas/Versions' }
+            otpChallengeId:
+              type: string
+              format: uuid
+              nullable: true
+              description: Required for GRANT — API 4 challenge (CONSENT, or GUARDIAN for a guardian's consent) with refId = benRegId, verified
+
+    WithdrawalRequest:
+      allOf:
+        - $ref: '#/components/schemas/ContextFields'
+        - type: object
+          required: [purposeCodes, versions]
+          properties:
+            purposeCodes:
+              oneOf:
+                - type: array
+                  minItems: 1
+                  maxItems: 50
+                  uniqueItems: true
+                  items: { type: string }
+                - type: string
+                  enum: [ALL]
+            versions: { $ref: '#/components/schemas/Versions' }
+
+    AccessRequest:
+      type: object
+      required: [beneficiaryRegId, purposeCodes, days, reason]
+      properties:
+        beneficiaryRegId: { type: integer, format: int64, minimum: 1 }
+        purposeCodes: { type: array, minItems: 1, maxItems: 20, uniqueItems: true, items: { type: string } }
+        days: { type: integer, minimum: 1, description: 'Maximum = consent.access-grant.max-days (TODO-LEGAL, default 30)' }
+        reason: { type: string, minLength: 1, maxLength: 255 }
+        facilityId: { type: integer, nullable: true }
+
+    AccessGrant:
+      type: object
+      properties:
+        grantId: { type: string, format: uuid }
+        beneficiaryRegId: { type: integer, format: int64 }
+        grantee:
+          type: object
+          properties:
+            userId: { type: integer, format: int64 }
+            name: { type: string }
+            facilityId: { type: integer, nullable: true }
+        purposes: { type: array, items: { type: string } }
+        type: { type: string, enum: [CONSENTED, BREAK_GLASS] }
+        status: { type: string, enum: [PENDING, ACTIVE, REVOKED, EXPIRED] }
+        days: { type: integer }
+        reason: { type: string }
+        validUntil: { type: string, format: date-time, nullable: true }
+        approvedAt: { type: string, format: date-time, nullable: true }
+        revokedAt: { type: string, format: date-time, nullable: true }
+        revokeReason: { type: string, nullable: true, enum: [PATIENT_REQUEST, WITHDRAWAL] }

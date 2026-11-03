@@ -1,0 +1,10 @@
+target/
+.git/
+.idea/
+.vscode/
+logs/
+*.log
+.env*
+Dockerfile*
+.dockerignore
+src/main/environment/common_local.properties
