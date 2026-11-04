@@ -26,6 +26,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import com.iemr.consent.data.consent.Channel;
 import com.iemr.consent.data.consent.ConsentMode;
 import com.iemr.consent.data.consent.ConsentingParty;
@@ -63,6 +64,8 @@ import jakarta.validation.constraints.Size;
  * @param guardian             for GUARDIAN
  * @param projectId            configuration in force (deviation 2)
  * @param configVersion        configuration version
+ * @param declaration          declaration agreed to; required on an accept, absent on a decline (feature 004)
+ * @param notifyRequest        JSON {@code notify}: where to send the Consent ID by SMS, or {@code null} (004)
  */
 public record SaveConsentRequest(Long beneficiaryRegId, @NotNull EventType eventType,
 		@NotNull ConsentingParty consentingParty, @NotNull Long noticeVersionId,
@@ -74,7 +77,8 @@ public record SaveConsentRequest(Long beneficiaryRegId, @NotNull EventType event
 		@NotBlank @Size(max = 100) @Pattern(regexp = ConsentPatterns.CODE) String deviceId,
 		@NotNull Instant capturedAt, @NotEmpty List<@Valid @NotNull DecisionItem> decisions,
 		List<@NotNull UUID> evidenceIds, @Valid Proof proof, @Valid GuardianInfo guardian, Integer projectId,
-		Integer configVersion) {
+		Integer configVersion, @Valid DeclarationInput declaration,
+		@JsonProperty("notify") @Valid NotifyInput notifyRequest) {
 
 	@Override
 	public String toString() {

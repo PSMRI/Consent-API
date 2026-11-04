@@ -41,6 +41,7 @@ import com.iemr.consent.data.evidence.ConsentEvidence;
 import com.iemr.consent.data.grant.AccessGrant;
 import com.iemr.consent.data.evidence.EvidenceType;
 import com.iemr.consent.data.notice.Notice;
+import com.iemr.consent.data.notify.ConsentNotification;
 import com.iemr.consent.data.notice.NoticePurpose;
 import com.iemr.consent.data.notice.NoticePurposeId;
 import com.iemr.consent.data.notice.NoticeTranslation;
@@ -62,10 +63,12 @@ class EntityMappingTest {
 			Purpose.class, List.of("cm_purpose", "purpose_id", "purpose_code", "version", "name", "description",
 					"legal_basis", "is_mandatory", "is_withdrawable", "validity_days", "is_active"),
 			Notice.class, List.of("cm_notice", "notice_version_id", "notice_code", "version_no", "context",
-					"is_material", "status", "approved_by", "published_at"),
+					"is_material", "status", "approved_by", "published_at", "project_id", "grievance_officer_name",
+					"grievance_phone", "grievance_email", "grievance_address", "grievance_office_hours"),
 			NoticeTranslation.class, List.of("cm_notice_translation", "translation_id", "notice_version_id",
 					"language_code", "language_name", "body", "data_items", "retention", "recipients",
-					"withdrawal_info", "grievance_info", "text_hash", "audio_ref", "helpline_script"),
+					"withdrawal_info", "grievance_info", "text_hash", "audio_ref", "helpline_script", "declaration",
+					"representative_declaration"),
 			NoticePurpose.class, List.of("cm_notice_purpose", "notice_version_id", "purpose_code", "display_rank"),
 			Consent.class, List.of("cm_consent", "consent_id", "beneficiary_reg_id", "event_type",
 					"consenting_party", "notice_version_id", "language_code", "text_hash", "channel", "mode",
@@ -78,7 +81,7 @@ class EntityMappingTest {
 			ConsentEvidence.class, List.of("cm_consent_evidence", "evidence_id", "consent_id", "type", "file_ref",
 					"sha256", "content_type", "size_bytes", "duration_sec", "witness_name", "witness_relationship",
 					"otp_status", "masked_phone", "call_id", "uploaded_by", "request_key", "request_hash",
-					"created_at"),
+					"created_at", "declaration_text", "declaration_wording", "declaration_app_default"),
 			GuardianLink.class, List.of("cm_guardian_link", "guardian_link_id", "consent_id", "beneficiary_reg_id",
 					"guardian_type", "guardian_name", "guardian_phone", "relationship", "verification_method",
 					"verified_at", "follow_up_required", "valid_until"),
@@ -106,6 +109,15 @@ class EntityMappingTest {
 	}
 
 	@Test
+	void notificationMapsTheV35ColumnsWithoutAMaskedPhone() {
+		Set<String> want = new TreeSet<>(List.of("notification_id", "consent_id", "channel", "phone", "status",
+				"attempted_at"));
+		want.addAll(AUDIT);
+		assertThat(ConsentNotification.class.getAnnotation(Table.class).name()).isEqualTo("cm_consent_notification");
+		assertThat(columns(ConsentNotification.class)).isEqualTo(want);
+	}
+
+	@Test
 	void appendOnlyTablesHaveNoSoftDeleteColumns() {
 		for (Class<?> entity : APPEND_ONLY) {
 			assertThat(AuditColumns.class.isAssignableFrom(entity)).as(entity.getSimpleName()).isFalse();
@@ -123,12 +135,15 @@ class EntityMappingTest {
 	}
 
 	@Test
-	void evidenceTypesKnowWhichAreFilesAndPhotos() {
+	void evidenceTypesKnowWhichAreFilesAndUploadable() {
 		assertThat(EvidenceType.VOICE_CLIP.isFile()).isTrue();
 		assertThat(EvidenceType.WITNESS.isFile()).isFalse();
-		assertThat(EvidenceType.PATIENT_PHOTO.isPhoto()).isTrue();
-		assertThat(EvidenceType.SIGNED_FORM_PHOTO.isPhoto()).isTrue();
-		assertThat(EvidenceType.VOICE_CLIP.isPhoto()).isFalse();
+		assertThat(EvidenceType.DECLARATION.isFile()).isFalse();
+		assertThat(EvidenceType.PATIENT_PHOTO.isFile()).isTrue();
+		assertThat(EvidenceType.VOICE_CLIP.isUploadable()).isTrue();
+		assertThat(EvidenceType.SIGNED_FORM_PHOTO.isUploadable()).isTrue();
+		assertThat(EvidenceType.PATIENT_PHOTO.isUploadable()).isFalse();
+		assertThat(EvidenceType.DECLARATION.isUploadable()).isFalse();
 		assertThat(new NoticePurposeId(1L, "P-REG")).isEqualTo(new NoticePurposeId(1L, "P-REG"));
 	}
 

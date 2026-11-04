@@ -30,6 +30,10 @@ import java.util.UUID;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+import com.iemr.consent.data.consent.DeclarationWording;
+import com.iemr.consent.data.notify.NotifyChannel;
+import com.iemr.consent.model.consent.DeclarationInput;
+import com.iemr.consent.model.consent.NotifyInput;
 import com.iemr.consent.data.grant.GrantStatus;
 import com.iemr.consent.data.grant.GrantType;
 import com.iemr.consent.model.consent.Proof;
@@ -56,7 +60,12 @@ class DtoPrivacyTest {
 				new AccessRequest(1001L, List.of("P-REM"), 7, "Sita follow-up", null).toString(),
 				new AccessGrantView("g-1", 1001L, new GranteeView(7L, "doctor", null), List.of("P-REM"),
 						GrantType.CONSENTED, GrantStatus.PENDING, 7, "Sita follow-up", null, null, null, null)
-						.toString());
+						.toString(),
+				new DeclarationInput("I, Sita, agree", "hi", 11L, DeclarationWording.PATIENT).toString(),
+				new NotifyInput(NotifyChannel.SMS, "9876543210").toString(),
+				ConsentFixtures.request().notifyBy(new NotifyInput(NotifyChannel.SMS, "9876543210"))
+						.declaration(new DeclarationInput("I, Sita, agree", "hi", 11L, DeclarationWording.PATIENT))
+						.build().toString());
 
 		assertThat(printed).allSatisfy(text -> assertThat(text).doesNotContain("9876543210").doesNotContain("123456")
 				.doesNotContain("Gita").doesNotContain("Sita"));

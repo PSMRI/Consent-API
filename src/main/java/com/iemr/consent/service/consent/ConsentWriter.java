@@ -42,12 +42,14 @@ import com.iemr.consent.data.consent.PurposeStatus;
 import com.iemr.consent.data.consent.SyncStatus;
 import com.iemr.consent.data.notice.Purpose;
 import com.iemr.consent.model.consent.DecisionItem;
+import com.iemr.consent.model.consent.NotificationResult;
 import com.iemr.consent.model.consent.PurposeResult;
 import com.iemr.consent.model.consent.SaveConsentRequest;
 import com.iemr.consent.model.consent.SaveConsentResult;
 import com.iemr.consent.repository.consent.ConsentPurposeRepository;
 import com.iemr.consent.repository.consent.ConsentRepository;
 import com.iemr.consent.service.audit.AuditLogService;
+import com.iemr.consent.service.notify.ConsentNotifier;
 import com.iemr.consent.utils.auth.AuthenticatedUser;
 
 /**
@@ -69,6 +71,10 @@ public class ConsentWriter {
 
 	private final List<ConsentProofWriter> proofWriters;
 
+	private final DeclarationProofWriter declarationWriter;
+
+	private final ConsentNotifier notifier;
+
 	private final AuditLogService auditLogService;
 
 	private final Clock clock;
@@ -76,11 +82,14 @@ public class ConsentWriter {
 	private final Duration maxSkew;
 
 	public ConsentWriter(ConsentRepository consentRepository, ConsentPurposeRepository purposeRepository,
-			List<ConsentProofWriter> proofWriters, AuditLogService auditLogService, Clock clock,
+			List<ConsentProofWriter> proofWriters, DeclarationProofWriter declarationWriter,
+			ConsentNotifier notifier, AuditLogService auditLogService, Clock clock,
 			ConsentProperties properties) {
 		this.consentRepository = consentRepository;
 		this.purposeRepository = purposeRepository;
 		this.proofWriters = proofWriters;
+		this.declarationWriter = declarationWriter;
+		this.notifier = notifier;
 		this.auditLogService = auditLogService;
 		this.clock = clock;
 		this.maxSkew = Duration.ofMinutes(properties.capture().maxSkewMinutes());
@@ -97,10 +106,13 @@ public class ConsentWriter {
 			results.add(writeDecision(consent, decision, purposes.get(decision.purposeCode())));
 		}
 		proofWriters.forEach(writer -> writer.write(consent, request, user));
+		declarationWriter.write(consent, validated.declaration(), user);
+		notifier.record(consent.getConsentId(), request.notifyRequest(), user);
 		auditLogService.append(AuditLogService.CONSENT_CAPTURED, consent.getConsentId(),
-				consent.getBeneficiaryRegId(), summary(results), overall(results), user.userId(),
-				sourceIp);
-		return new SaveConsentResult(consent.getConsentId(), consent.getSyncStatus(), results);
+				consent.getBeneficiaryRegId(), summary(results, validated.declaration()),
+				overall(results), user.userId(), sourceIp);
+		return new SaveConsentResult(consent.getConsentId(), consent.getSyncStatus(), results,
+				NotificationResult.notRequested());
 	}
 
 	private PurposeResult writeDecision(Consent consent, DecisionItem decision, Purpose purpose) {
@@ -162,8 +174,14 @@ public class ConsentWriter {
 		return consent;
 	}
 
-	private static String summary(List<PurposeResult> results) {
-		return results.stream().map(r -> r.purposeCode() + ":" + r.status()).collect(Collectors.joining(","));
+	/**
+	 * Purpose statuses, plus {@code ;D=} and the first 16 hex characters of the declaration's SHA-256 so the
+	 * declaration is inside the audit hash chain (FR-014) while the summary stays within 255 characters.
+	 */
+	static String summary(List<PurposeResult> results, DeclarationCheck declaration) {
+		String statuses = results.stream().map(r -> r.purposeCode() + ":" + r.status())
+				.collect(Collectors.joining(","));
+		return declaration == null ? statuses : statuses + ";D=" + declaration.sha256().substring(0, 16);
 	}
 
 	private static String overall(List<PurposeResult> results) {

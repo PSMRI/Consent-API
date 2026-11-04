@@ -24,6 +24,7 @@ package com.iemr.consent.controller.notice;
 
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
+import static org.hamcrest.Matchers.nullValue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -31,12 +32,14 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import java.util.List;
 
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 import com.iemr.consent.data.notice.NoticeContext;
 import com.iemr.consent.model.notice.ActiveNotice;
+import com.iemr.consent.model.notice.GrievanceContact;
 import com.iemr.consent.model.notice.NoticeLanguage;
 import com.iemr.consent.service.notice.NoticeService;
 import com.iemr.consent.support.TestFixtures;
@@ -63,7 +66,7 @@ class NoticeControllerTest {
 
 	@Test
 	void languages() throws Exception {
-		when(service.languages(NoticeContext.REGISTRATION)).thenReturn(List.of(new NoticeLanguage("hi", "हिन्दी", true)));
+		when(service.languages(NoticeContext.REGISTRATION, null)).thenReturn(List.of(new NoticeLanguage("hi", "हिन्दी", true)));
 
 		mvc.perform(get("/consent/v1/notices/active/languages").param("context", "REGISTRATION"))
 				.andExpect(status().isOk()).andExpect(jsonPath("$.statusCode").value(200))
@@ -73,12 +76,45 @@ class NoticeControllerTest {
 
 	@Test
 	void activeNotice() throws Exception {
-		when(service.activeNotice(NoticeContext.REVISIT, "hi")).thenReturn(new ActiveNotice(11L, "hi", "REVISIT", "b",
-				"h", null, "d", "r", "rc", "w", "g", List.of()));
+		when(service.activeNotice(NoticeContext.REVISIT, "hi", null)).thenReturn(new ActiveNotice(11L, "hi", "REVISIT",
+				"b", "h", null, "d", "r", "rc", "w", "g", List.of(), null, null, null));
 
 		mvc.perform(get("/consent/v1/notices/active").param("context", "REVISIT").param("lang", "hi"))
 				.andExpect(status().isOk()).andExpect(jsonPath("$.success").value(true))
-				.andExpect(jsonPath("$.data.noticeVersionId").value(11));
+				.andExpect(jsonPath("$.data.noticeVersionId").value(11))
+				.andExpect(jsonPath("$.data.declaration").doesNotExist())
+				.andExpect(jsonPath("$.data.representativeDeclaration").doesNotExist())
+				.andExpect(jsonPath("$.data.grievance").value(nullValue()));
+	}
+
+	@Test
+	@DisplayName("US1: projectId is passed through to both endpoints, with the new notice fields")
+	void projectIdIsPassedThrough() throws Exception {
+		when(service.languages(NoticeContext.REGISTRATION, 3)).thenReturn(List.of(new NoticeLanguage("hi", "h", false)));
+		when(service.activeNotice(NoticeContext.REGISTRATION, "hi", 3)).thenReturn(new ActiveNotice(77L, "hi",
+				"REGISTRATION", "b", "h", null, "d", "r", "rc", "w", "g", List.of(), "I agree", "We agree",
+				new GrievanceContact("Officer", "1800", "g@example.org", "Office", "10-5")));
+
+		mvc.perform(get("/consent/v1/notices/active/languages").param("context", "REGISTRATION")
+				.param("projectId", "3")).andExpect(status().isOk()).andExpect(jsonPath("$.data[0].languageCode").value("hi"));
+		mvc.perform(get("/consent/v1/notices/active").param("context", "REGISTRATION").param("lang", "hi")
+				.param("projectId", "3")).andExpect(status().isOk())
+				.andExpect(jsonPath("$.data.noticeVersionId").value(77))
+				.andExpect(jsonPath("$.data.declaration").value("I agree"))
+				.andExpect(jsonPath("$.data.representativeDeclaration").value("We agree"))
+				.andExpect(jsonPath("$.data.grievance.officerName").value("Officer"))
+				.andExpect(jsonPath("$.data.grievance.officeHours").value("10-5"));
+	}
+
+	@Test
+	@DisplayName("US1: projectId must be a positive number")
+	void badProjectIdIs400() throws Exception {
+		mvc.perform(get("/consent/v1/notices/active/languages").param("context", "REGISTRATION")
+				.param("projectId", "0")).andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.error.code").value("VALIDATION_FAILED"));
+		mvc.perform(get("/consent/v1/notices/active").param("context", "REGISTRATION").param("lang", "hi")
+				.param("projectId", "abc")).andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.statusCode").value(400));
 	}
 
 	@Test
@@ -93,7 +129,7 @@ class NoticeControllerTest {
 
 	@Test
 	void notFound() throws Exception {
-		when(service.activeNotice(NoticeContext.REGISTRATION, "xx"))
+		when(service.activeNotice(NoticeContext.REGISTRATION, "xx", null))
 				.thenThrow(new ConsentApiException(ErrorCode.NOT_FOUND));
 
 		mvc.perform(get("/consent/v1/notices/active").param("context", "REGISTRATION").param("lang", "xx"))

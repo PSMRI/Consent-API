@@ -26,6 +26,7 @@ import java.math.BigDecimal;
 import java.time.Instant;
 
 import com.iemr.consent.data.AuditColumns;
+import com.iemr.consent.data.consent.DeclarationWording;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -101,4 +102,16 @@ public class ConsentEvidence extends AuditColumns {
 
 	@Column(name = "created_at")
 	private Instant createdAt;
+
+	/** Declaration agreed to (type DECLARATION only); a generic statement, not personal data. */
+	@Column(name = "declaration_text")
+	private String declarationText;
+
+	@Enumerated(EnumType.STRING)
+	@Column(name = "declaration_wording")
+	private DeclarationWording declarationWording;
+
+	/** {@code true} when no declaration was published and the app's default wording was stored. */
+	@Column(name = "declaration_app_default")
+	private Boolean declarationAppDefault;
 }

@@ -27,9 +27,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.util.List;
 import java.util.Map;
 
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import com.iemr.consent.data.consent.Consent;
+import com.iemr.consent.data.consent.ConsentMode;
 import com.iemr.consent.data.consent.ConsentPurpose;
 import com.iemr.consent.data.consent.PurposeStatus;
 import com.iemr.consent.data.notice.Purpose;
@@ -91,5 +93,20 @@ class ConsentViewMapperTest {
 		assertThat(history.get(2).purposes()).isEmpty();
 		assertThat(history.get(0).capturedAt()).isEqualTo(TestFixtures.NOW);
 		assertThat(history.get(0).deviceId()).isEqualTo(newer.getDeviceId());
+	}
+
+	@Test
+	@DisplayName("FR-019 (004): a consent saved with the old VOICE_CLIP mode still shows unchanged in history")
+	void oldVoiceClipConsentStillShows() {
+		Consent old = PrincipalFixtures.event("c-old", TestFixtures.NOW.minusSeconds(600));
+		old.setMode(ConsentMode.VOICE_CLIP);
+
+		List<ConsentEventView> history = mapper.history(List.of(old),
+				List.of(PrincipalFixtures.row("c-old", "P-REG", PurposeStatus.GRANTED, 1, null)));
+
+		assertThat(history).singleElement().satisfies(view -> {
+			assertThat(view.mode()).isEqualTo(ConsentMode.VOICE_CLIP);
+			assertThat(view.purposes()).containsExactly(new PurposeOutcome("P-REG", PurposeStatus.GRANTED, 1));
+		});
 	}
 }

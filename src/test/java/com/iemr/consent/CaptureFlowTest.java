@@ -63,6 +63,10 @@ import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 
+import com.iemr.consent.data.notice.Notice;
+import com.iemr.consent.data.notice.NoticeTranslation;
+import com.iemr.consent.data.notify.ConsentNotification;
+import com.iemr.consent.data.notify.NotificationStatus;
 import com.iemr.consent.config.ConsentProperties;
 import com.iemr.consent.config.SecurityProperties;
 import com.iemr.consent.controller.consent.ConsentController;
@@ -91,6 +95,9 @@ import com.iemr.consent.service.audit.AuditLogServiceImpl;
 import com.iemr.consent.service.consent.ConsentServiceImpl;
 import com.iemr.consent.service.consent.ConsentValidator;
 import com.iemr.consent.service.consent.ConsentWriter;
+import com.iemr.consent.repository.notify.ConsentNotificationRepository;
+import com.iemr.consent.service.consent.DeclarationProofWriter;
+import com.iemr.consent.service.consent.DeclarationRule;
 import com.iemr.consent.service.consent.EvidenceProofWriter;
 import com.iemr.consent.service.consent.GuardianProofWriter;
 import com.iemr.consent.service.consent.GuardianRule;
@@ -98,10 +105,13 @@ import com.iemr.consent.service.consent.OtpProofRule;
 import com.iemr.consent.service.consent.OtpProofWriter;
 import com.iemr.consent.service.consent.ReadAloudProofRule;
 import com.iemr.consent.service.consent.SignaturePhotoProofRule;
-import com.iemr.consent.service.consent.VoiceClipProofRule;
+import com.iemr.consent.service.consent.RecordingRule;
+import com.iemr.consent.service.consent.SelfReadProofRule;
 import com.iemr.consent.service.consent.WitnessedProofRule;
 import com.iemr.consent.service.evidence.EvidenceServiceImpl;
 import com.iemr.consent.service.evidence.EvidenceStorage;
+import com.iemr.consent.service.notify.CommonApiSmsClient;
+import com.iemr.consent.service.notify.ConsentNotifier;
 import com.iemr.consent.service.notice.NoticeServiceImpl;
 import com.iemr.consent.service.otp.CommonApiOtpClient;
 import com.iemr.consent.service.otp.OtpChallenge;
@@ -134,9 +144,10 @@ import com.iemr.consent.utils.idempotency.RequestHasher;
 @Import({ ErrorResponseWriter.class, OriginPolicy.class, PublicPaths.class, JwtValidator.class,
 	SessionValidator.class, SecurityProperties.class, RequestHasher.class, FieldEncryptor.class,
 	NoticeServiceImpl.class, ConsentServiceImpl.class, ConsentValidator.class, ConsentWriter.class,
-	GuardianRule.class, OtpProofRule.class, VoiceClipProofRule.class, SignaturePhotoProofRule.class,
+	GuardianRule.class, OtpProofRule.class, SelfReadProofRule.class, RecordingRule.class, SignaturePhotoProofRule.class,
 	WitnessedProofRule.class, ReadAloudProofRule.class, EvidenceProofWriter.class, OtpProofWriter.class,
-	GuardianProofWriter.class, OtpServiceImpl.class, EvidenceServiceImpl.class, AuditLogServiceImpl.class,
+	GuardianProofWriter.class, DeclarationRule.class, DeclarationProofWriter.class, ConsentNotifier.class,
+	OtpServiceImpl.class, EvidenceServiceImpl.class, AuditLogServiceImpl.class,
 	CaptureFlowTest.SliceConfig.class })
 class CaptureFlowTest {
 
@@ -203,6 +214,12 @@ class CaptureFlowTest {
 	@MockBean
 	private EvidenceStorage evidenceStorage;
 
+	@MockBean
+	private ConsentNotificationRepository notificationRepository;
+
+	@MockBean
+	private CommonApiSmsClient smsClient;
+
 	private final Map<String, Consent> consents = new HashMap<>();
 
 	private final List<ConsentPurpose> purposeRows = new ArrayList<>();
@@ -212,7 +229,7 @@ class CaptureFlowTest {
 	@BeforeEach
 	void setUp() {
 		var notice = ConsentFixtures.notice(NoticeStatus.PUBLISHED);
-		when(noticeRepository.findFirstByContextAndStatusAndDeletedFalseOrderByVersionNoDesc(
+		when(noticeRepository.findFirstByContextAndProjectIdIsNullAndStatusAndDeletedFalseOrderByVersionNoDesc(
 				NoticeContext.REGISTRATION, NoticeStatus.PUBLISHED)).thenReturn(Optional.of(notice));
 		when(noticeRepository.findById(ConsentFixtures.NOTICE_ID)).thenReturn(Optional.of(notice));
 		when(translationRepository.findByNoticeVersionIdAndDeletedFalseOrderByLanguageCodeAsc(ConsentFixtures.NOTICE_ID))
@@ -264,12 +281,25 @@ class CaptureFlowTest {
 				.content(body);
 	}
 
+	private static final String SELF = "\"SELF\"";
+
+	private static final String GUARDIAN = "\"GUARDIAN\"";
+
+	private static final String PATIENT = "\"PATIENT\"";
+
+	private static final String REPRESENTATIVE = "\"REPRESENTATIVE\"";
+
+	/** 004: every accept carries the declaration shown (the app's default wording; the fixture notice has none). */
+	private static final String DECLARATION = ",\"declaration\":{\"text\":\"" + ConsentFixtures.DEFAULT_DECLARATION
+			+ "\",\"languageCode\":\"hi\",\"noticeVersionId\":11,\"wording\":\"PATIENT\"}";
+
 	private static String body(String mode, String reg, String rem, String extra) {
 		return "{\"beneficiaryRegId\":1001,\"eventType\":\"NEW\",\"consentingParty\":\"SELF\","
 				+ "\"noticeVersionId\":11,\"languageCode\":\"hi\",\"textHash\":\"" + ConsentFixtures.TEXT_HASH + "\","
 				+ "\"channel\":\"FACILITY\",\"mode\":" + mode + ",\"capturedBy\":999,\"deviceId\":\"van-07\","
 				+ "\"capturedAt\":\"2026-10-29T09:59:00Z\",\"decisions\":[{\"purposeCode\":\"P-REG\",\"decision\":\""
-				+ reg + "\"},{\"purposeCode\":\"P-REM\",\"decision\":\"" + rem + "\"}]" + extra + "}";
+				+ reg + "\"},{\"purposeCode\":\"P-REM\",\"decision\":\"" + rem + "\"}]"
+				+ ("GRANT".equals(reg) || "GRANT".equals(rem) ? DECLARATION : "") + extra + "}";
 	}
 
 	@Test
@@ -362,7 +392,7 @@ class CaptureFlowTest {
 				+ "\"Mother\",\"phone\":\"9876543210\",\"verification\":\"OTP\",\"otpChallengeId\":\"" + challenge
 				+ "\"}";
 
-		mvc.perform(save(body("\"SELF_READ\"", "GRANT", "GRANT", guardian).replace("\"SELF\"", "\"GUARDIAN\"")))
+		mvc.perform(save(body("\"SELF_READ\"", "GRANT", "GRANT", guardian).replace(SELF, GUARDIAN).replace(PATIENT, REPRESENTATIVE)))
 				.andExpect(status().isCreated());
 
 		ArgumentCaptor<GuardianLink> link = ArgumentCaptor.forClass(GuardianLink.class);
@@ -379,7 +409,7 @@ class CaptureFlowTest {
 		String guardian = ",\"guardian\":{\"guardianType\":\"DISABILITY_GUARDIAN\",\"name\":\"Ravi Kumar\","
 				+ "\"relationship\":\"Brother\",\"verification\":\"ID_SIGHTED\",\"witnessName\":\"Gita Bai\"}";
 
-		mvc.perform(save(body("\"SELF_READ\"", "GRANT", "GRANT", guardian).replace("\"SELF\"", "\"GUARDIAN\"")))
+		mvc.perform(save(body("\"SELF_READ\"", "GRANT", "GRANT", guardian).replace(SELF, GUARDIAN).replace(PATIENT, REPRESENTATIVE)))
 				.andExpect(status().isCreated());
 
 		ArgumentCaptor<GuardianLink> link = ArgumentCaptor.forClass(GuardianLink.class);
@@ -399,7 +429,7 @@ class CaptureFlowTest {
 	}
 
 	@Test
-	@DisplayName("M3: low-literacy patient, voice clip uploaded then linked")
+	@DisplayName("M3: read aloud with the patient's recorded agreement, uploaded then linked")
 	void m3VoiceClip() throws Exception {
 		byte[] clip = "synthetic-clip".getBytes();
 		String evidenceId = new com.fasterxml.jackson.databind.ObjectMapper().readTree(mvc.perform(
@@ -409,7 +439,9 @@ class CaptureFlowTest {
 				.andExpect(status().isCreated()).andReturn().getResponse().getContentAsString())
 				.at("/data/evidenceId").asText();
 
-		mvc.perform(save(body("\"VOICE_CLIP\"", "GRANT", "GRANT", ",\"evidenceIds\":[\"" + evidenceId + "\"]")))
+		// 004: reviewed list - the recording is part of READ_ALOUD, not a VOICE_CLIP mode
+		mvc.perform(save(body("\"READ_ALOUD\"", "GRANT", "GRANT",
+				",\"proof\":{\"workerConfirmed\":true},\"evidenceIds\":[\"" + evidenceId + "\"]")))
 				.andExpect(status().isCreated());
 		verify(evidenceRepository).linkToConsent(anyString(), anyString());
 	}
@@ -434,5 +466,116 @@ class CaptureFlowTest {
 				.andExpect(status().isUnauthorized());
 		mvc.perform(post("/consent/v1/consents").contentType(MediaType.APPLICATION_JSON).content("{}"))
 				.andExpect(status().isUnauthorized());
+	}
+
+	// ---- Feature 004: front-end review changes (T047; kept here to reuse this slice's set-up) ----
+
+	@Test
+	@DisplayName("C1 (004): accept with notify answers 201 with the SMS QUEUED and the phone masked")
+	void c1NotifyIsQueued() throws Exception {
+		List<ConsentNotification> rows = new ArrayList<>();
+		when(notificationRepository.save(any())).thenAnswer(i -> {
+			rows.add(i.getArgument(0));
+			return i.getArgument(0);
+		});
+		when(notificationRepository.findByConsentId(anyString())).thenAnswer(i -> rows.stream()
+				.filter(r -> r.getConsentId().equals(i.getArgument(0))).findFirst());
+		when(smsClient.send(anyString(), anyString(), any(), any(), anyString(), any())).thenReturn(true);
+
+		mvc.perform(save(body("\"SELF_READ\"", "GRANT", "GRANT",
+				",\"notify\":{\"channel\":\"SMS\",\"phone\":\"9876543210\"}")))
+				.andExpect(status().isCreated()).andExpect(jsonPath("$.success").value(true))
+				.andExpect(jsonPath("$.statusCode").value(201))
+				.andExpect(jsonPath("$.data.notification.status").value("QUEUED"))
+				.andExpect(jsonPath("$.data.notification.maskedPhone").value("******3210"));
+
+		assertThat(rows).as("inserted in the save, updated after commit").hasSize(2).containsOnly(rows.get(0));
+		assertThat(rows.get(0).getStatus()).isEqualTo(NotificationStatus.QUEUED);
+		assertThat(rows.get(0).getPhoneEncrypted()).doesNotContain("9876");
+		logs.assertNoneContain("9876543210");
+	}
+
+	@Test
+	@DisplayName("C1 (004): a failing SMS never fails the save")
+	void c1FailedSmsStillSaves() throws Exception {
+		when(smsClient.send(anyString(), anyString(), any(), any(), anyString(), any())).thenReturn(false);
+
+		mvc.perform(save(body("\"SELF_READ\"", "GRANT", "GRANT",
+				",\"notify\":{\"channel\":\"SMS\",\"phone\":\"9876543210\"}")))
+				.andExpect(status().isCreated()).andExpect(jsonPath("$.data.notification.status").value("FAILED"));
+		assertThat(consents).hasSize(1);
+	}
+
+	@Test
+	@DisplayName("C3 (004): decline without a declaration answers NOT_REQUESTED; with one it is refused")
+	void c3DeclineHasNoDeclaration() throws Exception {
+		mvc.perform(save(body("null", "DENY", "DENY", ""))).andExpect(status().isCreated())
+				.andExpect(jsonPath("$.data.notification.status").value("NOT_REQUESTED"));
+		mvc.perform(save(body("null", "DENY", "DENY", DECLARATION))).andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.error.code").value("VALIDATION_FAILED"))
+				.andExpect(jsonPath("$.error.details[0].field").value("declaration"));
+	}
+
+	@Test
+	@DisplayName("C2 (004): a declaration that differs from the published text is stale")
+	void c2StaleDeclarationIs409() throws Exception {
+		NoticeTranslation published = ConsentFixtures.translation("hi", null);
+		published.setDeclaration("Published declaration");
+		when(translationRepository.findByNoticeVersionIdAndLanguageCodeAndDeletedFalse(ConsentFixtures.NOTICE_ID,
+				"hi")).thenReturn(Optional.of(published));
+
+		mvc.perform(save(body("\"SELF_READ\"", "GRANT", "GRANT", ""))).andExpect(status().isConflict())
+				.andExpect(jsonPath("$.statusCode").value(409))
+				.andExpect(jsonPath("$.error.code").value("STALE_VERSION"));
+		assertThat(consents).isEmpty();
+	}
+
+	@Test
+	@DisplayName("C6 (004): a guardian agrees as representative in WITNESSED mode")
+	void c6GuardianWitnessed() throws Exception {
+		String challenge = UUID.randomUUID().toString();
+		verifiedChallenge(challenge, OtpReason.GUARDIAN, ConsentFixtures.GUARDIAN_PHONE);
+		String extra = ",\"proof\":{\"witnessName\":\"Sita Devi\",\"witnessRelationship\":\"Mother\"}"
+				+ ",\"guardian\":{\"guardianType\":\"PARENT\",\"name\":\"Sita Devi\",\"relationship\":"
+				+ "\"Mother\",\"phone\":\"9876543210\",\"verification\":\"OTP\",\"otpChallengeId\":\""
+				+ challenge + "\"}";
+
+		mvc.perform(save(body("\"WITNESSED\"", "GRANT", "GRANT", extra).replace(SELF, GUARDIAN)
+				.replace(PATIENT, REPRESENTATIVE))).andExpect(status().isCreated());
+		mvc.perform(save(body("\"WITNESSED\"", "GRANT", "GRANT", extra).replace(SELF, GUARDIAN)))
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.error.details[0].field").value("declaration.wording"));
+	}
+
+	@Test
+	@DisplayName("US3 (004): mode VOICE_CLIP is refused")
+	void voiceClipModeIsRefused() throws Exception {
+		mvc.perform(save(body("\"VOICE_CLIP\"", "GRANT", "GRANT", ""))).andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.success").value(false)).andExpect(jsonPath("$.statusCode").value(400))
+				.andExpect(jsonPath("$.error.code").value("VALIDATION_FAILED"))
+				.andExpect(jsonPath("$.error.details[0].field").value("mode"));
+	}
+
+	@Test
+	@DisplayName("US1 (004): the project's notice is returned for projectId, the central one without it")
+	void projectNotice() throws Exception {
+		Notice project = ConsentFixtures.notice(NoticeStatus.PUBLISHED);
+		project.setNoticeVersionId(77L);
+		project.setProjectId(3);
+		when(noticeRepository.findFirstByContextAndProjectIdAndStatusAndDeletedFalseOrderByVersionNoDesc(
+				NoticeContext.REGISTRATION, 3, NoticeStatus.PUBLISHED)).thenReturn(Optional.of(project));
+		NoticeTranslation hindi = ConsentFixtures.translation("hi", null);
+		hindi.setNoticeVersionId(77L);
+		hindi.setDeclaration("Project declaration");
+		when(translationRepository.findByNoticeVersionIdAndLanguageCodeAndDeletedFalse(77L, "hi"))
+				.thenReturn(Optional.of(hindi));
+
+		mvc.perform(get("/consent/v1/notices/active").param("context", "REGISTRATION").param("lang", "hi")
+				.param("projectId", "3").header("JwtToken", TOKEN)).andExpect(status().isOk())
+				.andExpect(jsonPath("$.data.noticeVersionId").value(77))
+				.andExpect(jsonPath("$.data.declaration").value("Project declaration"));
+		mvc.perform(get("/consent/v1/notices/active").param("context", "REGISTRATION").param("lang", "hi")
+				.header("JwtToken", TOKEN)).andExpect(status().isOk())
+				.andExpect(jsonPath("$.data.noticeVersionId").value(11));
 	}
 }

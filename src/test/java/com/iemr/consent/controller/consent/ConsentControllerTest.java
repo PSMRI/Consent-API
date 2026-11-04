@@ -42,6 +42,7 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 import com.iemr.consent.data.consent.PurposeStatus;
 import com.iemr.consent.data.consent.SyncStatus;
+import com.iemr.consent.model.consent.NotificationResult;
 import com.iemr.consent.model.consent.PurposeResult;
 import com.iemr.consent.model.consent.SaveConsentResult;
 import com.iemr.consent.service.consent.ConsentService;
@@ -88,13 +89,14 @@ class ConsentControllerTest {
 
 	@Test
 	void savedConsentIs201WithStatuses() throws Exception {
-		when(service.save(any(), eq(KEY), anyString(), eq(ConsentFixtures.WORKER), anyString()))
+		when(service.save(any(), eq(KEY), anyString(), eq(ConsentFixtures.WORKER), anyString(), any()))
 				.thenReturn(new SaveConsentResult("c-1", SyncStatus.SYNCED,
-						List.of(new PurposeResult("P-REG", PurposeStatus.GRANTED, 1))));
+						List.of(new PurposeResult("P-REG", PurposeStatus.GRANTED, 1)), NotificationResult.notRequested()));
 
 		mvc.perform(save(BODY).header("Idempotency-Key", KEY)).andExpect(status().isCreated())
 				.andExpect(jsonPath("$.statusCode").value(201)).andExpect(jsonPath("$.data.consentId").value("c-1"))
-				.andExpect(jsonPath("$.data.purposes[0].status").value("GRANTED"));
+				.andExpect(jsonPath("$.data.purposes[0].status").value("GRANTED"))
+				.andExpect(jsonPath("$.data.notification.status").value("NOT_REQUESTED"));
 	}
 
 	@Test
@@ -108,7 +110,7 @@ class ConsentControllerTest {
 
 	@Test
 	void staleNoticeIs409() throws Exception {
-		when(service.save(any(), anyString(), anyString(), any(), anyString()))
+		when(service.save(any(), anyString(), anyString(), any(), anyString(), any()))
 				.thenThrow(new ConsentApiException(ErrorCode.STALE_VERSION));
 
 		mvc.perform(save(BODY).header("Idempotency-Key", KEY)).andExpect(status().isConflict())

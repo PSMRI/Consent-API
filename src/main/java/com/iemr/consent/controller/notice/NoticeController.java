@@ -39,8 +39,10 @@ import com.iemr.consent.utils.http.TraceIdFilter;
 import com.iemr.consent.utils.response.ApiResponse;
 
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Positive;
 
 /** The consent dialog's notice step (front-end APIs 2 and 3; FR-001, FR-002). */
 @RestController
@@ -56,19 +58,22 @@ public class NoticeController {
 		this.clock = clock;
 	}
 
-	@Operation(summary = "Languages the active notice is published in")
+	@Operation(summary = "Languages the active notice is published in (central plus the project's own)")
 	@GetMapping("/active/languages")
 	public ApiResponse<List<NoticeLanguage>> languages(@RequestParam NoticeContext context,
-			HttpServletRequest request) {
-		return ApiResponse.ok(noticeService.languages(context), TraceIdFilter.currentTraceId(request), clock);
+			@Parameter(description = "Project; adds the languages of its own published notice")
+			@RequestParam(required = false) @Positive Integer projectId, HttpServletRequest request) {
+		List<NoticeLanguage> languages = noticeService.languages(context, projectId);
+		return ApiResponse.ok(languages, TraceIdFilter.currentTraceId(request), clock);
 	}
 
-	@Operation(summary = "Active notice for a context and language")
+	@Operation(summary = "Active notice for a context and language (the project's own when published)")
 	@GetMapping("/active")
 	public ApiResponse<ActiveNotice> active(@RequestParam NoticeContext context,
 			@RequestParam("lang") @Pattern(regexp = "^[a-z]{2,3}$") String languageCode,
-			HttpServletRequest request) {
-		return ApiResponse.ok(noticeService.activeNotice(context, languageCode),
+			@Parameter(description = "Project; its own notice in that language if published, else central")
+			@RequestParam(required = false) @Positive Integer projectId, HttpServletRequest request) {
+		return ApiResponse.ok(noticeService.activeNotice(context, languageCode, projectId),
 				TraceIdFilter.currentTraceId(request), clock);
 	}
 }

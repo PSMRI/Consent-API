@@ -26,6 +26,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.TreeMap;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -40,6 +41,7 @@ import com.iemr.consent.data.notice.NoticeStatus;
 import com.iemr.consent.data.notice.NoticeTranslation;
 import com.iemr.consent.data.notice.Purpose;
 import com.iemr.consent.model.notice.ActiveNotice;
+import com.iemr.consent.model.notice.GrievanceContact;
 import com.iemr.consent.model.notice.NoticeLanguage;
 import com.iemr.consent.model.notice.NoticePurposeView;
 import com.iemr.consent.repository.notice.NoticePurposeRepository;
@@ -79,17 +81,27 @@ public class NoticeServiceImpl implements NoticeService {
 	}
 
 	@Override
-	public List<NoticeLanguage> languages(NoticeContext context) {
-		return active(context).map(notice -> translationRepository
-				.findByNoticeVersionIdAndDeletedFalseOrderByLanguageCodeAsc(notice.getNoticeVersionId())
-				.stream().map(NoticeServiceImpl::language).toList()).orElse(List.of());
+	public List<NoticeLanguage> languages(NoticeContext context, Integer projectId) {
+		Map<String, NoticeLanguage> byCode = new TreeMap<>();
+		central(context).ifPresent(n -> addLanguages(byCode, n));
+		project(context, projectId).ifPresent(n -> addLanguages(byCode, n));
+		return List.copyOf(byCode.values());
 	}
 
 	@Override
-	public ActiveNotice activeNotice(NoticeContext context, String languageCode) {
-		Notice notice = active(context).orElseThrow(() -> new ConsentApiException(ErrorCode.NOT_FOUND));
+	public ActiveNotice activeNotice(NoticeContext context, String languageCode, Integer projectId) {
+		Optional<ActiveNotice> fromProject = project(context, projectId)
+				.flatMap(n -> translation(n.getNoticeVersionId(), languageCode).map(t -> view(n, t)));
+		if (fromProject.isPresent()) {
+			return fromProject.get();
+		}
+		Notice notice = central(context).orElseThrow(() -> new ConsentApiException(ErrorCode.NOT_FOUND));
 		NoticeTranslation t = translation(notice.getNoticeVersionId(), languageCode)
 				.orElseThrow(() -> new ConsentApiException(ErrorCode.NOT_FOUND));
+		return view(notice, t);
+	}
+
+	private ActiveNotice view(Notice notice, NoticeTranslation t) {
 		List<NoticePurposeView> purposes = purposesOf(notice).stream()
 				.map(p -> new NoticePurposeView(p.getPurposeCode(), p.getName(), p.getDescription(),
 						p.isMandatory(), p.isWithdrawable(), p.getValidityDays()))
@@ -97,7 +109,19 @@ public class NoticeServiceImpl implements NoticeService {
 		return new ActiveNotice(notice.getNoticeVersionId(), t.getLanguageCode(), notice.getContext().name(),
 				t.getBody(), t.getTextHash(), audioUrl(t.getAudioRef()), t.getDataItems(),
 				t.getRetention(), t.getRecipients(), t.getWithdrawalInfo(), t.getGrievanceInfo(),
-				purposes);
+				purposes, t.getDeclaration(), t.getRepresentativeDeclaration(), grievance(notice));
+	}
+
+	private static GrievanceContact grievance(Notice n) {
+		GrievanceContact contact = new GrievanceContact(n.getGrievanceOfficerName(), n.getGrievancePhone(),
+				n.getGrievanceEmail(), n.getGrievanceAddress(), n.getGrievanceOfficeHours());
+		return contact.equals(new GrievanceContact(null, null, null, null, null)) ? null : contact;
+	}
+
+	private void addLanguages(Map<String, NoticeLanguage> byCode, Notice notice) {
+		Long id = notice.getNoticeVersionId();
+		translationRepository.findByNoticeVersionIdAndDeletedFalseOrderByLanguageCodeAsc(id)
+				.forEach(t -> byCode.put(t.getLanguageCode(), language(t)));
 	}
 
 	@Override
@@ -117,9 +141,18 @@ public class NoticeServiceImpl implements NoticeService {
 		return new NoticeLanguage(t.getLanguageCode(), t.getLanguageName(), t.getAudioRef() != null);
 	}
 
-	private Optional<Notice> active(NoticeContext context) {
-		return noticeRepository.findFirstByContextAndStatusAndDeletedFalseOrderByVersionNoDesc(context,
-				NoticeStatus.PUBLISHED);
+	private Optional<Notice> central(NoticeContext context) {
+		return noticeRepository
+				.findFirstByContextAndProjectIdIsNullAndStatusAndDeletedFalseOrderByVersionNoDesc(
+						context, NoticeStatus.PUBLISHED);
+	}
+
+	private Optional<Notice> project(NoticeContext context, Integer projectId) {
+		if (projectId == null) {
+			return Optional.empty();
+		}
+		return noticeRepository.findFirstByContextAndProjectIdAndStatusAndDeletedFalseOrderByVersionNoDesc(
+				context, projectId, NoticeStatus.PUBLISHED);
 	}
 
 	/** The notice's purposes (latest active version of each), mandatory first, then display order. */

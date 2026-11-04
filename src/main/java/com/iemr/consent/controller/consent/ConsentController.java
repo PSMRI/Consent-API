@@ -38,6 +38,7 @@ import com.iemr.consent.service.consent.ConsentService;
 import com.iemr.consent.utils.auth.AuthenticatedUser;
 import com.iemr.consent.utils.auth.CurrentUser;
 import com.iemr.consent.utils.http.ClientIp;
+import com.iemr.consent.utils.http.ForwardedAuth;
 import com.iemr.consent.utils.http.TraceIdFilter;
 import com.iemr.consent.utils.idempotency.IdempotencyKey;
 import com.iemr.consent.utils.idempotency.RequestHasher;
@@ -70,7 +71,8 @@ public class ConsentController {
 			@CurrentUser AuthenticatedUser user, HttpServletRequest request) {
 		String key = IdempotencyKey.require(request);
 		String ip = ClientIp.of(request);
-		SaveConsentResult result = consentService.save(body, key, hasher.hash(body), user, ip);
+		SaveConsentResult result = consentService.save(body, key, hasher.hash(body), user, ip,
+				ForwardedAuth.from(request));
 		return ResponseEntity.status(HttpStatus.CREATED)
 				.body(ApiResponse.created(result, TraceIdFilter.currentTraceId(request), clock));
 	}

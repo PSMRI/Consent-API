@@ -28,10 +28,11 @@ import org.springframework.stereotype.Component;
 
 import com.iemr.consent.data.consent.ConsentMode;
 import com.iemr.consent.data.evidence.ConsentEvidence;
+import com.iemr.consent.data.evidence.EvidenceType;
 import com.iemr.consent.model.consent.SaveConsentRequest;
 import com.iemr.consent.utils.auth.AuthenticatedUser;
 
-/** SIGNATURE_PHOTO mode: at least one patient or signed-form photo (M3). */
+/** SIGNATURE_PHOTO mode: exactly one signed-form photo (M3; reviewed list, feature 004: no patient photo). */
 @Component
 public class SignaturePhotoProofRule implements ModeProofRule {
 
@@ -42,8 +43,8 @@ public class SignaturePhotoProofRule implements ModeProofRule {
 
 	@Override
 	public void check(SaveConsentRequest request, AuthenticatedUser user, List<ConsentEvidence> evidence) {
-		if (evidence.stream().noneMatch(e -> e.getType().isPhoto())) {
-			throw ConsentRules.invalid("evidenceIds", "must contain a patient or signed-form photo");
+		if (evidence.stream().filter(e -> e.getType() == EvidenceType.SIGNED_FORM_PHOTO).count() != 1) {
+			throw ConsentRules.invalid("evidenceIds", "must contain exactly one signed-form photo");
 		}
 	}
 }

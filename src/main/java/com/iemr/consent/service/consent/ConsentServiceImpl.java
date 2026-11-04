@@ -26,13 +26,16 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 
 import com.iemr.consent.data.consent.Consent;
+import com.iemr.consent.model.consent.NotificationResult;
 import com.iemr.consent.model.consent.SaveConsentRequest;
 import com.iemr.consent.model.consent.SaveConsentResult;
 import com.iemr.consent.repository.consent.ConsentPurposeRepository;
 import com.iemr.consent.repository.consent.ConsentRepository;
+import com.iemr.consent.service.notify.ConsentNotifier;
 import com.iemr.consent.utils.auth.AuthenticatedUser;
 import com.iemr.consent.utils.exception.ConsentApiException;
 import com.iemr.consent.utils.exception.ErrorCode;
+import com.iemr.consent.utils.http.ForwardedAuth;
 
 /**
  * Saves a consent exactly once per request key (C18, research R4): a repeat with the same key and
@@ -51,30 +54,40 @@ public class ConsentServiceImpl implements ConsentService {
 
 	private final ConsentWriter writer;
 
+	private final ConsentNotifier notifier;
+
 	public ConsentServiceImpl(ConsentRepository consentRepository, ConsentPurposeRepository purposeRepository,
-			ConsentValidator validator, ConsentWriter writer) {
+			ConsentValidator validator, ConsentWriter writer, ConsentNotifier notifier) {
 		this.consentRepository = consentRepository;
 		this.purposeRepository = purposeRepository;
 		this.validator = validator;
 		this.writer = writer;
+		this.notifier = notifier;
 	}
 
 	@Override
 	public SaveConsentResult save(SaveConsentRequest request, String requestKey, String requestHash,
-			AuthenticatedUser user, String sourceIp) {
+			AuthenticatedUser user, String sourceIp, ForwardedAuth auth) {
 		Consent existing = consentRepository.findByCapturedByAndRequestKey(user.userId(), requestKey)
 				.orElse(null);
 		if (existing != null) {
 			return replay(existing, requestHash);
 		}
 		ValidatedConsent validated = validator.validate(request, user);
+		SaveConsentResult saved;
 		try {
-			return writer.write(request, validated, requestKey, requestHash, user, sourceIp);
+			saved = writer.write(request, validated, requestKey, requestHash, user, sourceIp);
 		} catch (DataIntegrityViolationException e) {
 			Consent winner = consentRepository.findByCapturedByAndRequestKey(user.userId(), requestKey)
 					.orElseThrow(() -> new ConsentApiException(ErrorCode.STATE_CONFLICT));
 			return replay(winner, requestHash);
 		}
+		if (request.notifyRequest() == null) {
+			return saved;
+		}
+		NotificationResult notification = notifier.send(saved.consentId(), request, validated.notice().notice(),
+				auth, user);
+		return new SaveConsentResult(saved.consentId(), saved.syncStatus(), saved.purposes(), notification);
 	}
 
 	private SaveConsentResult replay(Consent consent, String requestHash) {
@@ -82,6 +95,7 @@ public class ConsentServiceImpl implements ConsentService {
 			throw new ConsentApiException(ErrorCode.STATE_CONFLICT);
 		}
 		return ConsentResultMapper.fromStored(consent,
-				purposeRepository.findByConsentIdOrderByConsentPurposeIdAsc(consent.getConsentId()));
+				purposeRepository.findByConsentIdOrderByConsentPurposeIdAsc(consent.getConsentId()),
+				notifier.stored(consent.getConsentId()));
 	}
 }

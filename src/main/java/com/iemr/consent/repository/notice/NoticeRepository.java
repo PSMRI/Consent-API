@@ -38,9 +38,13 @@ import com.iemr.consent.data.notice.NoticeStatus;
 @Repository
 public interface NoticeRepository extends JpaRepository<Notice, Long> {
 
-	/** The active notice: the highest published version for a context. */
-	Optional<Notice> findFirstByContextAndStatusAndDeletedFalseOrderByVersionNoDesc(NoticeContext context,
-			NoticeStatus status);
+	/** The active central notice: the highest published version for a context with no project (feature 004). */
+	Optional<Notice> findFirstByContextAndProjectIdIsNullAndStatusAndDeletedFalseOrderByVersionNoDesc(
+			NoticeContext context, NoticeStatus status);
+
+	/** A project's own active notice: the highest published version for a context and project (feature 004). */
+	Optional<Notice> findFirstByContextAndProjectIdAndStatusAndDeletedFalseOrderByVersionNoDesc(
+			NoticeContext context, Integer projectId, NoticeStatus status);
 
 	/** Published material versions of a notice newer than the given one, newest first (C14). */
 	@Query("select n from Notice n where n.noticeCode = :code and n.versionNo > :version"

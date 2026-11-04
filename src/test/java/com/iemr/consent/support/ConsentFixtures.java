@@ -31,6 +31,7 @@ import com.iemr.consent.data.consent.Channel;
 import com.iemr.consent.data.consent.ConsentMode;
 import com.iemr.consent.data.consent.ConsentingParty;
 import com.iemr.consent.data.consent.Decision;
+import com.iemr.consent.data.consent.DeclarationWording;
 import com.iemr.consent.data.consent.EventType;
 import com.iemr.consent.data.consent.GuardianType;
 import com.iemr.consent.data.consent.GuardianVerification;
@@ -40,7 +41,9 @@ import com.iemr.consent.data.notice.NoticeStatus;
 import com.iemr.consent.data.notice.NoticeTranslation;
 import com.iemr.consent.data.notice.Purpose;
 import com.iemr.consent.model.consent.DecisionItem;
+import com.iemr.consent.model.consent.DeclarationInput;
 import com.iemr.consent.model.consent.GuardianInfo;
+import com.iemr.consent.model.consent.NotifyInput;
 import com.iemr.consent.model.consent.Proof;
 import com.iemr.consent.model.consent.SaveConsentRequest;
 import com.iemr.consent.service.notice.PublishedNotice;
@@ -133,6 +136,24 @@ public final class ConsentFixtures {
 
 		private EventType eventType = EventType.NEW;
 
+		private DeclarationInput declaration;
+
+		private boolean declarationSet;
+
+		private NotifyInput notify;
+
+		/** Overrides the default declaration (by default an accept carries the app's default wording). */
+		public RequestBuilder declaration(DeclarationInput value) {
+			declaration = value;
+			declarationSet = true;
+			return this;
+		}
+
+		public RequestBuilder notifyBy(NotifyInput value) {
+			notify = value;
+			return this;
+		}
+
 		public RequestBuilder eventType(EventType value) {
 			eventType = value;
 			return this;
@@ -190,9 +211,22 @@ public final class ConsentFixtures {
 		}
 
 		public SaveConsentRequest build() {
+			boolean anyGrant = decisions.stream().anyMatch(d -> d.decision() == Decision.GRANT);
+			if (!declarationSet) {
+				declaration = anyGrant ? defaultDeclaration(party) : null;
+			}
 			return new SaveConsentRequest(beneficiary, eventType, party, NOTICE_ID, "hi", hash, Channel.FACILITY,
-					mode, 999L, 1, 2, 3, "MMU", "van-07", capturedAt, decisions, evidence, proof, guardian, 12, 3);
+					mode, 999L, 1, 2, 3, "MMU", "van-07", capturedAt, decisions, evidence, proof, guardian, 12, 3,
+					declaration, notify);
 		}
+	}
+
+	/** The declaration a 004 accept carries when the notice publishes none (the app's default wording). */
+	public static final String DEFAULT_DECLARATION = "I have read or heard the notice and I agree.";
+
+	public static DeclarationInput defaultDeclaration(ConsentingParty party) {
+		return new DeclarationInput(DEFAULT_DECLARATION, "hi", NOTICE_ID,
+				party == ConsentingParty.GUARDIAN ? DeclarationWording.REPRESENTATIVE : DeclarationWording.PATIENT);
 	}
 
 	public static RequestBuilder request() {

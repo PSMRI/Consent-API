@@ -127,21 +127,22 @@ public class EvidenceServiceImpl implements EvidenceService {
 
 	/** @return the normalised content type */
 	private String check(EvidenceUpload upload) {
-		if (upload.type() == null || !upload.type().isFile()) {
-			throw invalid("type", "must be VOICE_CLIP, PATIENT_PHOTO or SIGNED_FORM_PHOTO");
+		if (upload.type() == null || !upload.type().isUploadable()) {
+			throw invalid("type", "must be VOICE_CLIP or SIGNED_FORM_PHOTO");
 		}
 		if (upload.content().length == 0) {
 			throw invalid("file", "must not be empty");
 		}
-		if (upload.content().length > settings.maxBytes()) {
+		boolean audio = upload.type() == EvidenceType.VOICE_CLIP;
+		if (upload.content().length > (audio ? settings.maxAudioBytes() : settings.maxPhotoBytes())) {
 			throw new ConsentApiException(ErrorCode.PAYLOAD_TOO_LARGE);
 		}
 		String contentType = normalise(upload.contentType());
-		String family = upload.type() == EvidenceType.VOICE_CLIP ? "audio/" : "image/";
+		String family = audio ? "audio/" : "image/";
 		if (!settings.allowedContentTypes().contains(contentType) || !contentType.startsWith(family)) {
 			throw new ConsentApiException(ErrorCode.UNSUPPORTED_MEDIA_TYPE);
 		}
-		if (upload.type() == EvidenceType.VOICE_CLIP && !validDuration(upload.durationSec())) {
+		if (audio && !validDuration(upload.durationSec())) {
 			throw invalid("durationSec", "must be between " + settings.voiceMinSeconds() + " and "
 					+ settings.voiceMaxSeconds() + " seconds");
 		}

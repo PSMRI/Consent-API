@@ -227,7 +227,7 @@ class PreferenceCentreFlowTest {
 
 	private void notices() {
 		Notice notice = ConsentFixtures.notice(NoticeStatus.PUBLISHED);
-		when(noticeRepository.findFirstByContextAndStatusAndDeletedFalseOrderByVersionNoDesc(
+		when(noticeRepository.findFirstByContextAndProjectIdIsNullAndStatusAndDeletedFalseOrderByVersionNoDesc(
 				NoticeContext.REGISTRATION, NoticeStatus.PUBLISHED)).thenReturn(Optional.of(notice));
 		when(noticeRepository.findById(ConsentFixtures.NOTICE_ID)).thenReturn(Optional.of(notice));
 		when(noticePurposeRepository.findByNoticeVersionIdAndDeletedFalseOrderByDisplayRankAsc(

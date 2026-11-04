@@ -82,4 +82,12 @@ public class NoticeTranslation extends AuditColumns {
 
 	@Column(name = "helpline_script")
 	private String helplineScript;
+
+	/** Patient declaration in this language; {@code null} = the app's default wording. */
+	@Column(name = "declaration")
+	private String declaration;
+
+	/** Guardian / representative declaration; {@code null} = use {@link #declaration}. */
+	@Column(name = "representative_declaration")
+	private String representativeDeclaration;
 }

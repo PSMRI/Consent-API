@@ -47,6 +47,12 @@ public interface AuditLogService {
 	String ACCESS_REVOKED = "ACCESS_REVOKED";
 
 	/**
+	 * Audit action for unlinked evidence removed by the clean-up job (feature 004). Its {@code consentId} is
+	 * null and its purpose summary is {@code evidence:<evidenceId>}; no personal data.
+	 */
+	String EVIDENCE_PURGED = "EVIDENCE_PURGED";
+
+	/**
 	 * @param purposeSummary purpose codes with statuses, e.g. {@code P-REG:GRANTED,P-REM:DENIED}; no
 	 *                       personal values
 	 */

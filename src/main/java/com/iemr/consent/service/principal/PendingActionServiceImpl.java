@@ -135,8 +135,8 @@ public class PendingActionServiceImpl implements PendingActionService {
 	/** CONSENT_MISSING for the active notice's purposes that have no current decision. */
 	private Optional<PendingAction> missing(NoticeContext context, List<ConsentPurpose> current) {
 		Optional<Notice> notice = noticeRepository
-				.findFirstByContextAndStatusAndDeletedFalseOrderByVersionNoDesc(context,
-				NoticeStatus.PUBLISHED);
+				.findFirstByContextAndProjectIdIsNullAndStatusAndDeletedFalseOrderByVersionNoDesc(
+						context, NoticeStatus.PUBLISHED);
 		if (notice.isEmpty()) {
 			return Optional.empty();
 		}

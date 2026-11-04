@@ -88,7 +88,7 @@ class PendingActionServiceImplTest {
 		noticePurposes = mock(NoticePurposeRepository.class);
 		links = mock(GuardianLinkRepository.class);
 		Notice registration = ConsentFixtures.notice(NoticeStatus.PUBLISHED);
-		when(notices.findFirstByContextAndStatusAndDeletedFalseOrderByVersionNoDesc(NoticeContext.REGISTRATION,
+		when(notices.findFirstByContextAndProjectIdIsNullAndStatusAndDeletedFalseOrderByVersionNoDesc(NoticeContext.REGISTRATION,
 				NoticeStatus.PUBLISHED)).thenReturn(Optional.of(registration));
 		when(notices.findById(ConsentFixtures.NOTICE_ID)).thenReturn(Optional.of(registration));
 		when(noticePurposes.findByNoticeVersionIdAndDeletedFalseOrderByDisplayRankAsc(ConsentFixtures.NOTICE_ID))
@@ -147,10 +147,21 @@ class PendingActionServiceImplTest {
 	}
 
 	@Test
+	@DisplayName("US1 (004): pending actions use the central notice only, never a project notice")
+	void pendingActionsUseTheCentralNoticeOnly() {
+		current();
+		pending();
+		verify(notices).findFirstByContextAndProjectIdIsNullAndStatusAndDeletedFalseOrderByVersionNoDesc(
+				NoticeContext.REGISTRATION, NoticeStatus.PUBLISHED);
+		verify(notices, never()).findFirstByContextAndProjectIdAndStatusAndDeletedFalseOrderByVersionNoDesc(any(),
+				any(), any());
+	}
+
+	@Test
 	void revisitUsesTheRevisitNoticeAndNoNoticeMeansOnlyDecisionRules() {
 		Notice revisit = ConsentFixtures.notice(NoticeStatus.PUBLISHED);
 		revisit.setNoticeVersionId(REVISIT_NOTICE);
-		when(notices.findFirstByContextAndStatusAndDeletedFalseOrderByVersionNoDesc(NoticeContext.REVISIT,
+		when(notices.findFirstByContextAndProjectIdIsNullAndStatusAndDeletedFalseOrderByVersionNoDesc(NoticeContext.REVISIT,
 				NoticeStatus.PUBLISHED)).thenReturn(Optional.of(revisit));
 		when(noticePurposes.findByNoticeVersionIdAndDeletedFalseOrderByDisplayRankAsc(REVISIT_NOTICE))
 				.thenReturn(List.of(link("P-TRT")));
@@ -158,7 +169,7 @@ class PendingActionServiceImplTest {
 		assertThat(service.pending(BEN, NoticeContext.REVISIT))
 				.containsExactly(new PendingAction(PendingReason.CONSENT_MISSING, List.of("P-TRT"), null));
 
-		when(notices.findFirstByContextAndStatusAndDeletedFalseOrderByVersionNoDesc(NoticeContext.REGISTRATION,
+		when(notices.findFirstByContextAndProjectIdIsNullAndStatusAndDeletedFalseOrderByVersionNoDesc(NoticeContext.REGISTRATION,
 				NoticeStatus.PUBLISHED)).thenReturn(Optional.empty());
 		assertThat(pending()).isEmpty();
 	}

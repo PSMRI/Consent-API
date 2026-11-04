@@ -54,6 +54,13 @@ public final class TestFixtures {
 		return consentProperties(1048576L);
 	}
 
+	/** Test limits: recordings up to 1024 bytes, signed-form photos up to 512 bytes. */
+	public static final long AUDIO_MAX_BYTES = 1024L;
+
+	public static final long PHOTO_MAX_BYTES = 512L;
+
+	public static final String SMS_TEMPLATE = "Consent ID: {consentId}. Grievance: {grievance}";
+
 	public static ConsentProperties consentProperties(long maxBodyBytes) {
 		return consentProperties(maxBodyBytes, STORAGE_DIR, "");
 	}
@@ -62,11 +69,14 @@ public final class TestFixtures {
 		return new ConsentProperties(new ConsentProperties.Request(maxBodyBytes),
 				new ConsentProperties.Health(1500L), new ConsentProperties.Redis(1500L),
 				new ConsentProperties.RateLimit(60L),
-				new ConsentProperties.Evidence(storageDir, 1024L, 30, 60,
-						List.of("audio/webm", "audio/ogg", "audio/mpeg", "audio/wav", "image/jpeg", "image/png")),
+				new ConsentProperties.Evidence(storageDir, 1024L, 2, 120,
+						List.of("audio/webm", "audio/ogg", "audio/mpeg", "audio/wav", "audio/mp4", "audio/x-m4a",
+								"image/jpeg", "image/png"),
+						AUDIO_MAX_BYTES, PHOTO_MAX_BYTES, 60, 24, "0 0 * * * ?"),
 				new ConsentProperties.Capture(1440L), new ConsentProperties.CommonApi(COMMON_API_URL, 3000),
 				new ConsentProperties.Notice(audioBaseUrl), new ConsentProperties.Otp(300L, 30L, 5),
-				new ConsentProperties.Encryption(ENCRYPTION_KEY), new ConsentProperties.AccessGrant(30, 24));
+				new ConsentProperties.Encryption(ENCRYPTION_KEY), new ConsentProperties.AccessGrant(30, 24),
+				new ConsentProperties.Sms(SMS_TEMPLATE, 2000));
 	}
 
 	public static SecurityProperties securityProperties() {

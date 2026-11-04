@@ -130,6 +130,7 @@ class ProofWritersTest {
 	}
 
 	@Test
+	@DisplayName("US4 (004): evidence linked by another save, or purged by the clean-up, is a conflict")
 	void evidenceAlreadyLinkedByAnotherSaveIsAConflict() {
 		when(evidence.linkToConsent(anyString(), anyString())).thenReturn(0);
 

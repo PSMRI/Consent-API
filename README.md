@@ -11,15 +11,23 @@ Delivered so far:
 - `002-mmu-consent-capture`: the MMU consent dialog's endpoints (front-end APIs 2–7).
 - `003-patient-consent-management`: the preference centre (front-end APIs 8–14) and the
   doctor's access request.
+- `004-capture-review-changes`: APIs 2, 3, 6 and 7 brought in line with the front-end team's
+  reviewed list (3 Nov 2026):
+  - project notices (`projectId`);
+  - declarations and the grievance contact;
+  - five consent modes, with an optional recording;
+  - signed-form photo only;
+  - SMS with the Consent ID (`notify`);
+  - unused evidence removed after 24 h.
 
 | Method | Path | Purpose |
 |---|---|---|
-| GET | `/consent/v1/notices/active/languages?context=` | Languages the active notice is published in |
-| GET | `/consent/v1/notices/active?context=&lang=` | Active notice, sections, fingerprint and purposes |
+| GET | `/consent/v1/notices/active/languages?context=&projectId=` | Languages of the central notice plus the project's own |
+| GET | `/consent/v1/notices/active?context=&lang=&projectId=` | Active notice (the project's own when published), sections, declarations, grievance contact, fingerprint and purposes |
 | POST | `/consent/v1/otp/challenges` | Send an OTP (through Common-API's consent OTP) |
 | POST | `/consent/v1/otp/challenges/{id}/verify` | Verify an OTP |
-| POST | `/consent/v1/evidence` | Upload a voice clip or photo (multipart; encrypted at rest) |
-| POST | `/consent/v1/consents` | Save Accept or Decline per purpose |
+| POST | `/consent/v1/evidence` | Upload a recording or the signed-form photo (multipart; encrypted at rest; unused uploads removed after 24 h) |
+| POST | `/consent/v1/consents` | Save Accept or Decline per purpose, with the declaration agreed to; optional SMS with the Consent ID |
 | GET | `/consent/v1/principals/{benRegId}/consents` | A patient's current consents and history |
 | GET | `/consent/v1/principals/{benRegId}/pending-actions?context=` | Consent still needed (missing, legacy, re-consent, guardian-to-self) |
 | POST | `/consent/v1/principals/{benRegId}/preferences` | Turn purposes on (with OTP) or off |
@@ -76,7 +84,10 @@ Swagger UI (where enabled): `http://localhost:8095/swagger-ui.html`.
 | `consent.encryption.key` | yes (secret) | Base64 32-byte AES key for personal fields and evidence files |
 | `consent.evidence.storage-dir` | yes | writable directory (a mounted volume) for encrypted evidence |
 | `consent.common-api.base-url`, `consent.common-api.timeout-ms` | URL yes / `3000` | Common-API, used for OTP |
-| `consent.evidence.max-bytes`, `voice-min-seconds`, `voice-max-seconds` | `10485760` / `30` / `60` | TODO-DPO |
+| `consent.evidence.max-bytes`, `voice-min-seconds`, `voice-max-seconds` | `10485760` / `2` / `120` | upload ceiling and recording length (TODO-DPO) |
+| `consent.evidence.max-audio-bytes`, `max-photo-bytes`, `self-read-max-seconds` | `5242880` / `2097152` / `60` | per-type limits; SELF_READ recording limit (TODO-DPO) |
+| `consent.evidence.unlinked-retention-hours`, `cleanup-cron` | `24` / `0 0 * * * ?` | unused evidence clean-up (Quartz, in-memory) (TODO-DPO) |
+| `consent.sms.template`, `consent.sms.timeout-ms` | see `application.properties` / `2000` | consent SMS via Common-API `/sms/sendSMS`; `{consentId}`, `{grievance}` (TODO-LEGAL wording) |
 | `consent.capture.max-skew-minutes` | `1440` | device time further off is flagged (TODO-DPO) |
 | `consent.otp.ttl-seconds`, `retention-minutes`, `max-attempts` | `300` / `30` / `5` | TODO-DPO |
 | `consent.notice.audio-base-url` | empty | prefix for notice audio links |
@@ -156,8 +167,9 @@ when `springdoc.swagger-ui.enabled=true`.
 ## Database
 
 `cm_` tables in `db_identity` come from AMRIT-DB migration
-`dbidentity/V33__Consent_Manager_Capture.sql` and (doctor access grants)
-`dbidentity/V34__Consent_Access_Grant.sql`. Demo notice and purpose text (placeholders,
+`dbidentity/V33__Consent_Manager_Capture.sql`, (doctor access grants)
+`dbidentity/V34__Consent_Access_Grant.sql` and (feature 004: project notices, declarations,
+grievance contact, SMS notifications) `dbidentity/V35__Consent_Capture_Review.sql`. Demo notice and purpose text (placeholders,
 `TODO-LEGAL`) is a manual script for dev/demo databases only:
 `AMRIT-DB/src/main/resources/db/consent_demo/01_consent_demo_seed.sql`.
 

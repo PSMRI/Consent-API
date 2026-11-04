@@ -33,13 +33,16 @@ import java.util.Optional;
 import java.util.Set;
 
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import com.iemr.consent.data.notice.Notice;
 import com.iemr.consent.data.notice.NoticeContext;
 import com.iemr.consent.data.notice.NoticePurpose;
 import com.iemr.consent.data.notice.NoticeStatus;
+import com.iemr.consent.data.notice.NoticeTranslation;
 import com.iemr.consent.model.notice.ActiveNotice;
+import com.iemr.consent.model.notice.GrievanceContact;
 import com.iemr.consent.model.notice.NoticeLanguage;
 import com.iemr.consent.repository.notice.NoticePurposeRepository;
 import com.iemr.consent.repository.notice.NoticeRepository;
@@ -72,7 +75,7 @@ class NoticeServiceImplTest {
 		purposes = mock(PurposeRepository.class);
 		service = service("https://audio/");
 		Notice notice = ConsentFixtures.notice(NoticeStatus.PUBLISHED);
-		when(notices.findFirstByContextAndStatusAndDeletedFalseOrderByVersionNoDesc(NoticeContext.REGISTRATION,
+		when(notices.findFirstByContextAndProjectIdIsNullAndStatusAndDeletedFalseOrderByVersionNoDesc(NoticeContext.REGISTRATION,
 				NoticeStatus.PUBLISHED)).thenReturn(Optional.of(notice));
 		when(notices.findById(ID)).thenReturn(Optional.of(notice));
 		when(links.findByNoticeVersionIdAndDeletedFalseOrderByDisplayRankAsc(ID))
@@ -101,14 +104,14 @@ class NoticeServiceImplTest {
 		when(translations.findByNoticeVersionIdAndDeletedFalseOrderByLanguageCodeAsc(ID)).thenReturn(
 				List.of(ConsentFixtures.translation("en", "a.mp3"), ConsentFixtures.translation("hi", null)));
 
-		assertThat(service.languages(NoticeContext.REGISTRATION)).containsExactly(
+		assertThat(service.languages(NoticeContext.REGISTRATION, null)).containsExactly(
 				new NoticeLanguage("en", "name-en", true), new NoticeLanguage("hi", "name-hi", false));
 	}
 
 	@Test
 	void noPublishedNoticeMeansNoLanguagesAndNotFound() {
-		assertThat(service.languages(NoticeContext.REVISIT)).isEmpty();
-		assertThatThrownBy(() -> service.activeNotice(NoticeContext.REVISIT, "hi"))
+		assertThat(service.languages(NoticeContext.REVISIT, null)).isEmpty();
+		assertThatThrownBy(() -> service.activeNotice(NoticeContext.REVISIT, "hi", null))
 				.isInstanceOf(ConsentApiException.class).extracting("errorCode").isEqualTo(ErrorCode.NOT_FOUND);
 	}
 
@@ -117,7 +120,7 @@ class NoticeServiceImplTest {
 		when(translations.findByNoticeVersionIdAndLanguageCodeAndDeletedFalse(ID, "en"))
 				.thenReturn(Optional.of(ConsentFixtures.translation("en", "a.mp3")));
 
-		ActiveNotice notice = service.activeNotice(NoticeContext.REGISTRATION, "en");
+		ActiveNotice notice = service.activeNotice(NoticeContext.REGISTRATION, "en", null);
 
 		assertThat(notice.noticeVersionId()).isEqualTo(ID);
 		assertThat(notice.context()).isEqualTo("REGISTRATION");
@@ -128,6 +131,9 @@ class NoticeServiceImplTest {
 		assertThat(notice.purposes()).extracting("purposeCode").containsExactly("P-REG", "P-REM", "P-RES");
 		assertThat(notice.purposes().get(1).validityDays()).as("latest purpose version").isEqualTo(180);
 		assertThat(notice.toString()).doesNotContain("notice body");
+		assertThat(notice.declaration()).isNull();
+		assertThat(notice.representativeDeclaration()).isNull();
+		assertThat(notice.grievance()).as("no grievance_* column set").isNull();
 	}
 
 	@Test
@@ -137,13 +143,13 @@ class NoticeServiceImplTest {
 		when(translations.findByNoticeVersionIdAndLanguageCodeAndDeletedFalse(ID, "en"))
 				.thenReturn(Optional.of(ConsentFixtures.translation("en", "a.mp3")));
 
-		assertThat(service.activeNotice(NoticeContext.REGISTRATION, "hi").audioUrl()).isNull();
-		assertThat(service("").activeNotice(NoticeContext.REGISTRATION, "en").audioUrl()).isNull();
+		assertThat(service.activeNotice(NoticeContext.REGISTRATION, "hi", null).audioUrl()).isNull();
+		assertThat(service("").activeNotice(NoticeContext.REGISTRATION, "en", null).audioUrl()).isNull();
 	}
 
 	@Test
 	void unknownLanguageIsNotFound() {
-		assertThatThrownBy(() -> service.activeNotice(NoticeContext.REGISTRATION, "xx"))
+		assertThatThrownBy(() -> service.activeNotice(NoticeContext.REGISTRATION, "xx", null))
 				.isInstanceOf(ConsentApiException.class).extracting("errorCode").isEqualTo(ErrorCode.NOT_FOUND);
 	}
 
@@ -164,5 +170,108 @@ class NoticeServiceImplTest {
 		assertThat(service.findPublished(ID, "hi")).isEmpty();
 		assertThat(service.findPublished(ID, "hi")).isEmpty();
 		assertThat(Set.of(NoticeStatus.values())).contains(NoticeStatus.DRAFT);
+	}
+
+	private static final long PROJECT_NOTICE_ID = 77L;
+
+	private Notice projectNotice() {
+		Notice notice = ConsentFixtures.notice(NoticeStatus.PUBLISHED);
+		notice.setNoticeVersionId(PROJECT_NOTICE_ID);
+		notice.setNoticeCode("MMU-REGISTRATION-P3");
+		notice.setProjectId(3);
+		notice.setGrievanceOfficerName("Officer");
+		when(notices.findFirstByContextAndProjectIdAndStatusAndDeletedFalseOrderByVersionNoDesc(
+				NoticeContext.REGISTRATION, 3, NoticeStatus.PUBLISHED)).thenReturn(Optional.of(notice));
+		when(links.findByNoticeVersionIdAndDeletedFalseOrderByDisplayRankAsc(PROJECT_NOTICE_ID))
+				.thenReturn(List.of(link("P-REG", 1)));
+		when(purposes.findByPurposeCodeInAndActiveTrueAndDeletedFalse(Set.of("P-REG")))
+				.thenReturn(List.of(ConsentFixtures.purpose("P-REG", true, null, 1)));
+		return notice;
+	}
+
+	private static NoticeTranslation projectTranslation(String lang, String audioRef) {
+		NoticeTranslation t = ConsentFixtures.translation(lang, audioRef);
+		t.setNoticeVersionId(PROJECT_NOTICE_ID);
+		t.setLanguageName("project-" + lang);
+		t.setDeclaration("I agree (project)");
+		t.setRepresentativeDeclaration("We agree for the patient (project)");
+		return t;
+	}
+
+	@Test
+	@DisplayName("US1: the project's notice in that language, with its declarations and grievance contact")
+	void projectNoticeWhenPublishedInTheLanguage() {
+		Notice project = projectNotice();
+		project.setGrievancePhone("1800");
+		project.setGrievanceEmail("g@example.org");
+		project.setGrievanceAddress("Office");
+		project.setGrievanceOfficeHours("10-5");
+		when(translations.findByNoticeVersionIdAndLanguageCodeAndDeletedFalse(PROJECT_NOTICE_ID, "hi"))
+				.thenReturn(Optional.of(projectTranslation("hi", null)));
+
+		ActiveNotice notice = service.activeNotice(NoticeContext.REGISTRATION, "hi", 3);
+
+		assertThat(notice.noticeVersionId()).isEqualTo(PROJECT_NOTICE_ID);
+		assertThat(notice.purposes()).extracting("purposeCode").containsExactly("P-REG");
+		assertThat(notice.declaration()).isEqualTo("I agree (project)");
+		assertThat(notice.representativeDeclaration()).isEqualTo("We agree for the patient (project)");
+		assertThat(notice.grievance()).isEqualTo(new GrievanceContact("Officer", "1800", "g@example.org", "Office",
+				"10-5"));
+	}
+
+	@Test
+	@DisplayName("US1: central notice when the project has no notice in that language, or no notice at all")
+	void centralFallback() {
+		projectNotice();
+		when(translations.findByNoticeVersionIdAndLanguageCodeAndDeletedFalse(ID, "kn"))
+				.thenReturn(Optional.of(ConsentFixtures.translation("kn", null)));
+
+		assertThat(service.activeNotice(NoticeContext.REGISTRATION, "kn", 3).noticeVersionId()).isEqualTo(ID);
+		assertThat(service.activeNotice(NoticeContext.REGISTRATION, "kn", 5).noticeVersionId()).isEqualTo(ID);
+		assertThatThrownBy(() -> service.activeNotice(NoticeContext.REGISTRATION, "xx", 3))
+				.isInstanceOf(ConsentApiException.class).extracting("errorCode").isEqualTo(ErrorCode.NOT_FOUND);
+	}
+
+	@Test
+	@DisplayName("US1: grievance contact is present when any one of its fields is set")
+	void grievanceWithOnlySomeFields() {
+		Notice notice = ConsentFixtures.notice(NoticeStatus.PUBLISHED);
+		notice.setGrievanceEmail("g@example.org");
+		when(notices.findFirstByContextAndProjectIdIsNullAndStatusAndDeletedFalseOrderByVersionNoDesc(
+				NoticeContext.REVISIT, NoticeStatus.PUBLISHED)).thenReturn(Optional.of(notice));
+		when(translations.findByNoticeVersionIdAndLanguageCodeAndDeletedFalse(ID, "hi"))
+				.thenReturn(Optional.of(ConsentFixtures.translation("hi", null)));
+
+		assertThat(service.activeNotice(NoticeContext.REVISIT, "hi", null).grievance())
+				.isEqualTo(new GrievanceContact(null, null, "g@example.org", null, null));
+	}
+
+	@Test
+	@DisplayName("US1: languages are central plus project, each code once, project entry winning")
+	void languageUnion() {
+		projectNotice();
+		when(translations.findByNoticeVersionIdAndDeletedFalseOrderByLanguageCodeAsc(ID)).thenReturn(
+				List.of(ConsentFixtures.translation("en", null), ConsentFixtures.translation("kn", null)));
+		when(translations.findByNoticeVersionIdAndDeletedFalseOrderByLanguageCodeAsc(PROJECT_NOTICE_ID)).thenReturn(
+				List.of(projectTranslation("en", "p.mp3"), projectTranslation("hi", null)));
+
+		assertThat(service.languages(NoticeContext.REGISTRATION, 3)).containsExactly(
+				new NoticeLanguage("en", "project-en", true), new NoticeLanguage("hi", "project-hi", false),
+				new NoticeLanguage("kn", "name-kn", false));
+		assertThat(service.languages(NoticeContext.REGISTRATION, 5)).extracting("languageCode")
+				.containsExactly("en", "kn");
+	}
+
+	@Test
+	@DisplayName("US1: a project with a notice but no central notice still lists its languages")
+	void projectLanguagesWithoutCentralNotice() {
+		Notice project = projectNotice();
+		project.setContext(NoticeContext.REVISIT);
+		when(notices.findFirstByContextAndProjectIdAndStatusAndDeletedFalseOrderByVersionNoDesc(
+				NoticeContext.REVISIT, 3, NoticeStatus.PUBLISHED)).thenReturn(Optional.of(project));
+		when(translations.findByNoticeVersionIdAndDeletedFalseOrderByLanguageCodeAsc(PROJECT_NOTICE_ID))
+				.thenReturn(List.of(projectTranslation("hi", null)));
+
+		assertThat(service.languages(NoticeContext.REVISIT, 3)).extracting("languageCode").containsExactly("hi");
 	}
 }

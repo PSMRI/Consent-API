@@ -38,6 +38,7 @@ import com.iemr.consent.data.consent.ConsentingParty;
 import com.iemr.consent.data.consent.Decision;
 import com.iemr.consent.data.consent.EventType;
 import com.iemr.consent.data.evidence.ConsentEvidence;
+import com.iemr.consent.data.evidence.EvidenceType;
 import com.iemr.consent.data.notice.Purpose;
 import com.iemr.consent.model.consent.DecisionItem;
 import com.iemr.consent.model.consent.SaveConsentRequest;
@@ -55,7 +56,11 @@ import com.iemr.consent.utils.exception.ErrorCode;
  * <li>The notice version is still published and the fingerprint matches the language shown;
  * otherwise {@code STALE_VERSION}.</li>
  * <li>Decisions cover exactly the notice's purposes, once each.</li>
- * <li>A GRANT needs a mode and that mode's proof ({@link ModeProofRule}); SELF_READ needs none.
+ * <li>A project's own notice is used only for that project (FR-012a).</li>
+ * <li>The declaration passes {@link DeclarationRule} (feature 004).</li>
+ * <li>At most one recording in any mode (feature 004).</li>
+ * <li>A GRANT needs a mode and that mode's proof ({@link ModeProofRule}): SELF_READ, READ_ALOUD, WITNESSED,
+ * SIGNATURE_PHOTO or OTP. VOICE_CLIP has no rule any more, so it is refused as "not supported" (feature 004).
  * A decline with no mode is allowed only when every decision is DENY.</li>
  * <li>Every evidence id can be linked; a guardian's details pass {@link GuardianRule}.</li>
  * </ul>
@@ -72,13 +77,16 @@ public class ConsentValidator {
 
 	private final GuardianRule guardianRule;
 
+	private final DeclarationRule declarationRule;
+
 	private final Map<ConsentMode, ModeProofRule> rules = new EnumMap<>(ConsentMode.class);
 
 	public ConsentValidator(NoticeService noticeService, EvidenceService evidenceService,
-			GuardianRule guardianRule, List<ModeProofRule> rules) {
+			GuardianRule guardianRule, DeclarationRule declarationRule, List<ModeProofRule> rules) {
 		this.noticeService = noticeService;
 		this.evidenceService = evidenceService;
 		this.guardianRule = guardianRule;
+		this.declarationRule = declarationRule;
 		rules.forEach(rule -> this.rules.put(rule.mode(), rule));
 	}
 
@@ -89,13 +97,18 @@ public class ConsentValidator {
 		PublishedNotice notice = noticeService.findPublished(request.noticeVersionId(), request.languageCode())
 				.filter(n -> n.translation().getTextHash().equals(request.textHash()))
 				.orElseThrow(() -> new ConsentApiException(ErrorCode.STALE_VERSION));
+		checkProject(request, notice);
 		checkDecisions(request.decisions(), notice.purposes());
+		DeclarationCheck declaration = declarationRule.check(request, notice);
 		boolean anyGrant = request.decisions().stream().anyMatch(d -> d.decision() == Decision.GRANT);
 		if (anyGrant && request.mode() == null) {
 			throw ConsentRules.invalid("mode", "is required when any purpose is granted");
 		}
 		List<ConsentEvidence> evidence = evidenceService.requireLinkable(orEmpty(request.evidenceIds()), user);
-		if (anyGrant && request.mode() != ConsentMode.SELF_READ) {
+		if (evidence.stream().filter(e -> e.getType() == EvidenceType.VOICE_CLIP).count() > 1) {
+			throw ConsentRules.invalid("evidenceIds", "must contain at most one recording");
+		}
+		if (anyGrant) {
 			ModeProofRule rule = rules.get(request.mode());
 			if (rule == null) {
 				throw ConsentRules.invalid("mode", "is not supported");
@@ -107,7 +120,15 @@ public class ConsentValidator {
 			guardianRule.check(request, user);
 			all.addAll(evidenceService.requireLinkable(orEmpty(request.guardian().evidenceIds()), user));
 		}
-		return new ValidatedConsent(notice, all);
+		return new ValidatedConsent(notice, all, declaration);
+	}
+
+	/** FR-012a: a project's own notice may only be used for that project; a central notice for any. */
+	private static void checkProject(SaveConsentRequest request, PublishedNotice notice) {
+		Integer owner = notice.notice().getProjectId();
+		if (owner != null && !owner.equals(request.projectId())) {
+			throw new ConsentApiException(ErrorCode.STALE_VERSION);
+		}
 	}
 
 	private static void checkDecisions(List<DecisionItem> decisions, List<Purpose> purposes) {

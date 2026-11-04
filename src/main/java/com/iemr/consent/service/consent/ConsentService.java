@@ -25,10 +25,15 @@ package com.iemr.consent.service.consent;
 import com.iemr.consent.model.consent.SaveConsentRequest;
 import com.iemr.consent.model.consent.SaveConsentResult;
 import com.iemr.consent.utils.auth.AuthenticatedUser;
+import com.iemr.consent.utils.http.ForwardedAuth;
 
 /** Saving consent decisions (FR-009 – FR-017). */
 public interface ConsentService {
 
+	/**
+	 * Validates and saves a consent; a repeated request key returns the first answer. When the request has
+	 * {@code notify}, the SMS is sent after commit with the caller's login ({@code auth}) and never fails the save.
+	 */
 	SaveConsentResult save(SaveConsentRequest request, String requestKey, String requestHash,
-			AuthenticatedUser user, String sourceIp);
+			AuthenticatedUser user, String sourceIp, ForwardedAuth auth);
 }

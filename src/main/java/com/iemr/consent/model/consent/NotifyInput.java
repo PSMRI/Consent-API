@@ -20,32 +20,24 @@
  * along with this program.  If not, see https://www.gnu.org/licenses/.
  */
 
-package com.iemr.consent.service.consent;
+package com.iemr.consent.model.consent;
 
-import java.util.List;
+import com.iemr.consent.data.notify.NotifyChannel;
 
-import org.springframework.stereotype.Component;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
 
-import com.iemr.consent.data.consent.ConsentMode;
-import com.iemr.consent.data.evidence.ConsentEvidence;
-import com.iemr.consent.data.evidence.EvidenceType;
-import com.iemr.consent.model.consent.SaveConsentRequest;
-import com.iemr.consent.utils.auth.AuthenticatedUser;
-
-/** VOICE_CLIP mode: exactly one uploaded voice clip (M3). */
-@Component
-public class VoiceClipProofRule implements ModeProofRule {
-
-	@Override
-	public ConsentMode mode() {
-		return ConsentMode.VOICE_CLIP;
-	}
+/**
+ * Where to send the Consent ID and grievance contact after a save (feature 004).
+ *
+ * @param channel SMS
+ * @param phone   10-digit mobile number; stored encrypted, never logged
+ */
+public record NotifyInput(@NotNull NotifyChannel channel,
+		@NotNull @Pattern(regexp = ConsentPatterns.PHONE) String phone) {
 
 	@Override
-	public void check(SaveConsentRequest request, AuthenticatedUser user, List<ConsentEvidence> evidence) {
-		long clips = evidence.stream().filter(e -> e.getType() == EvidenceType.VOICE_CLIP).count();
-		if (clips != 1) {
-			throw ConsentRules.invalid("evidenceIds", "must contain exactly one voice clip");
-		}
+	public String toString() {
+		return "NotifyInput[channel=" + channel + "]";
 	}
 }

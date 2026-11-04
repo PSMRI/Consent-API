@@ -38,11 +38,13 @@ import java.util.Optional;
 import java.util.UUID;
 
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.RegisterExtension;
 import org.mockito.ArgumentCaptor;
 import org.springframework.dao.DataIntegrityViolationException;
 
+import com.iemr.consent.utils.response.FieldErrorDetail;
 import com.iemr.consent.data.evidence.ConsentEvidence;
 import com.iemr.consent.data.evidence.EvidenceType;
 import com.iemr.consent.model.evidence.EvidenceUploadResult;
@@ -110,7 +112,7 @@ class EvidenceServiceImplTest {
 
 	@Test
 	void photoWithoutDuration() {
-		service.upload(new EvidenceUpload(EvidenceType.PATIENT_PHOTO, SHA, null, "image/png", CLIP), "k",
+		service.upload(new EvidenceUpload(EvidenceType.SIGNED_FORM_PHOTO, SHA, null, "image/png", CLIP), "k",
 				ConsentFixtures.WORKER);
 		verify(storage).store(anyString(), any());
 	}
@@ -125,24 +127,64 @@ class EvidenceServiceImplTest {
 	void fileChecks() {
 		assertCode(new EvidenceUpload(EvidenceType.WITNESS, SHA, null, "image/png", CLIP), ErrorCode.VALIDATION_FAILED);
 		assertCode(new EvidenceUpload(null, SHA, null, "image/png", CLIP), ErrorCode.VALIDATION_FAILED);
-		assertCode(new EvidenceUpload(EvidenceType.PATIENT_PHOTO, SHA, null, "image/png", new byte[0]),
+		assertCode(new EvidenceUpload(EvidenceType.SIGNED_FORM_PHOTO, SHA, null, "image/png", new byte[0]),
 				ErrorCode.VALIDATION_FAILED);
-		assertCode(new EvidenceUpload(EvidenceType.PATIENT_PHOTO, SHA, null, "image/png", new byte[2048]),
-				ErrorCode.PAYLOAD_TOO_LARGE);
-		assertCode(new EvidenceUpload(EvidenceType.PATIENT_PHOTO, SHA, null, "application/pdf", CLIP),
+		assertCode(new EvidenceUpload(EvidenceType.SIGNED_FORM_PHOTO, SHA, null, "application/pdf", CLIP),
 				ErrorCode.UNSUPPORTED_MEDIA_TYPE);
-		assertCode(new EvidenceUpload(EvidenceType.PATIENT_PHOTO, SHA, null, null, CLIP),
+		assertCode(new EvidenceUpload(EvidenceType.SIGNED_FORM_PHOTO, SHA, null, null, CLIP),
 				ErrorCode.UNSUPPORTED_MEDIA_TYPE);
 		assertCode(new EvidenceUpload(EvidenceType.VOICE_CLIP, SHA, BigDecimal.valueOf(35), "image/png", CLIP),
 				ErrorCode.UNSUPPORTED_MEDIA_TYPE);
 	}
 
 	@Test
-	void voiceClipMustBeThirtyToSixtySeconds() {
+	@DisplayName("M3 (004): a recording is 2-120 seconds")
+	void recordingIsTwoToOneHundredTwentySeconds() {
 		assertCode(voice(null), ErrorCode.VALIDATION_FAILED);
-		assertCode(voice(BigDecimal.valueOf(29.9)), ErrorCode.VALIDATION_FAILED);
-		assertCode(voice(BigDecimal.valueOf(70)), ErrorCode.VALIDATION_FAILED);
-		service.upload(voice(BigDecimal.valueOf(60)), "k", ConsentFixtures.WORKER);
+		assertCode(voice(new BigDecimal("1.9")), ErrorCode.VALIDATION_FAILED);
+		assertCode(voice(new BigDecimal("120.1")), ErrorCode.VALIDATION_FAILED);
+		service.upload(voice(BigDecimal.valueOf(2)), "k", ConsentFixtures.WORKER);
+		service.upload(voice(BigDecimal.valueOf(120)), "k2", ConsentFixtures.WORKER);
+	}
+
+	@Test
+	@DisplayName("US4 (004): PATIENT_PHOTO is no longer accepted")
+	void patientPhotoIsRefused() {
+		assertThatThrownBy(() -> service.upload(new EvidenceUpload(EvidenceType.PATIENT_PHOTO, SHA, null, "image/png",
+				CLIP), "k", ConsentFixtures.WORKER)).isInstanceOf(ConsentApiException.class)
+				.extracting("errorCode", "details").containsExactly(ErrorCode.VALIDATION_FAILED,
+						List.of(new FieldErrorDetail("type", "must be VOICE_CLIP or SIGNED_FORM_PHOTO")));
+	}
+
+	@Test
+	@DisplayName("M3 (004): files at the size limit for their type are accepted")
+	void atTheLimitPerType() {
+		byte[] audioAtLimit = new byte[(int) TestFixtures.AUDIO_MAX_BYTES];
+		byte[] photoAtLimit = new byte[(int) TestFixtures.PHOTO_MAX_BYTES];
+		service.upload(new EvidenceUpload(EvidenceType.VOICE_CLIP, Sha256.hex(audioAtLimit), BigDecimal.TEN,
+				"audio/webm", audioAtLimit), "k1", ConsentFixtures.WORKER);
+		service.upload(new EvidenceUpload(EvidenceType.SIGNED_FORM_PHOTO, Sha256.hex(photoAtLimit), null, "image/jpeg",
+				photoAtLimit), "k2", ConsentFixtures.WORKER);
+		verify(storage, org.mockito.Mockito.times(2)).store(anyString(), any());
+	}
+
+	@Test
+	@DisplayName("M3 (004): one byte over the limit for the type is too large")
+	void overTheLimitPerType() {
+		assertCode(new EvidenceUpload(EvidenceType.VOICE_CLIP, SHA, BigDecimal.TEN, "audio/webm",
+				new byte[(int) TestFixtures.AUDIO_MAX_BYTES + 1]), ErrorCode.PAYLOAD_TOO_LARGE);
+		assertCode(new EvidenceUpload(EvidenceType.SIGNED_FORM_PHOTO, SHA, null, "image/png",
+				new byte[(int) TestFixtures.PHOTO_MAX_BYTES + 1]), ErrorCode.PAYLOAD_TOO_LARGE);
+	}
+
+	@Test
+	@DisplayName("M3 (004): m4a recordings are accepted")
+	void m4aIsAccepted() {
+		for (String type : List.of("audio/mp4", "audio/x-m4a")) {
+			service.upload(new EvidenceUpload(EvidenceType.VOICE_CLIP, SHA, BigDecimal.valueOf(90), type, CLIP),
+					"k-" + type, ConsentFixtures.WORKER);
+		}
+		verify(storage, org.mockito.Mockito.times(2)).store(anyString(), any());
 	}
 
 	@Test

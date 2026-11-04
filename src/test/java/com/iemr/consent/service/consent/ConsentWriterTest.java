@@ -43,14 +43,18 @@ import org.mockito.ArgumentCaptor;
 import com.iemr.consent.data.consent.Consent;
 import com.iemr.consent.data.consent.ConsentPurpose;
 import com.iemr.consent.data.consent.Decision;
+import com.iemr.consent.data.consent.DeclarationWording;
 import com.iemr.consent.data.consent.PurposeStatus;
 import com.iemr.consent.data.consent.SyncStatus;
+import com.iemr.consent.data.notify.NotifyChannel;
+import com.iemr.consent.model.consent.NotifyInput;
 import com.iemr.consent.model.consent.PurposeResult;
 import com.iemr.consent.model.consent.SaveConsentRequest;
 import com.iemr.consent.model.consent.SaveConsentResult;
 import com.iemr.consent.repository.consent.ConsentPurposeRepository;
 import com.iemr.consent.repository.consent.ConsentRepository;
 import com.iemr.consent.service.audit.AuditLogService;
+import com.iemr.consent.service.notify.ConsentNotifier;
 import com.iemr.consent.support.ConsentFixtures;
 import com.iemr.consent.support.TestFixtures;
 import com.iemr.consent.utils.auth.AuthenticatedUser;
@@ -67,7 +71,12 @@ class ConsentWriterTest {
 
 	private ConsentWriter writer;
 
-	private final ValidatedConsent validated = new ValidatedConsent(ConsentFixtures.publishedNotice(), List.of());
+	private DeclarationProofWriter declarationWriter;
+
+	private ConsentNotifier notifier;
+
+	private final ValidatedConsent validated = new ValidatedConsent(ConsentFixtures.publishedNotice(), List.of(),
+			null);
 
 	@BeforeEach
 	void setUp() {
@@ -75,9 +84,12 @@ class ConsentWriterTest {
 		purposes = mock(ConsentPurposeRepository.class);
 		proofWriter = mock(ConsentProofWriter.class);
 		audit = mock(AuditLogService.class);
+		declarationWriter = mock(DeclarationProofWriter.class);
 		when(consents.saveAndFlush(any())).thenAnswer(i -> i.getArgument(0));
 		when(purposes.findCurrent(any(), anyString())).thenReturn(Optional.empty());
-		writer = new ConsentWriter(consents, purposes, List.of(proofWriter), audit, TestFixtures.CLOCK,
+		notifier = mock(ConsentNotifier.class);
+		writer = new ConsentWriter(consents, purposes, List.of(proofWriter), declarationWriter, notifier, audit,
+				TestFixtures.CLOCK,
 				TestFixtures.consentProperties());
 	}
 
@@ -118,8 +130,47 @@ class ConsentWriterTest {
 		assertThat(rows.get(1).getValidUntil()).isEqualTo(TestFixtures.NOW.plus(Duration.ofDays(365)));
 		assertThat(rows).allMatch(ConsentPurpose::isCurrent);
 		verify(proofWriter).write(consent, ConsentFixtures.request().build(), ConsentFixtures.WORKER);
+		verify(notifier).record(consent.getConsentId(), null, ConsentFixtures.WORKER);
 		verify(audit).append(AuditLogService.CONSENT_CAPTURED, consent.getConsentId(), 1001L,
 				"P-REG:GRANTED,P-REM:GRANTED", "GRANTED", 42L, "10.0.0.5");
+	}
+
+	@Test
+	@DisplayName("C2 (004): the declaration is stored and its hash prefix is in the audit summary")
+	void declarationIsStoredAndInTheAuditChain() {
+		DeclarationCheck declaration = new DeclarationCheck("I agree", DeclarationWording.PATIENT, true,
+				"0123456789abcdef" + "f".repeat(48));
+		SaveConsentRequest request = ConsentFixtures.request().build();
+
+		writer.write(request, new ValidatedConsent(ConsentFixtures.publishedNotice(), List.of(), declaration), "key-1",
+				"hash-1", ConsentFixtures.WORKER, "10.0.0.5");
+
+		Consent consent = savedConsent();
+		verify(declarationWriter).write(consent, declaration, ConsentFixtures.WORKER);
+		verify(audit).append(AuditLogService.CONSENT_CAPTURED, consent.getConsentId(), 1001L,
+				"P-REG:GRANTED,P-REM:GRANTED;D=0123456789abcdef", "GRANTED", 42L, "10.0.0.5");
+	}
+
+	@Test
+	@DisplayName("U2: with 16 purposes and a declaration the audit summary still fits 255 characters")
+	void auditSummaryFitsWithSixteenPurposes() {
+		List<PurposeResult> results = java.util.stream.IntStream.rangeClosed(1, 16)
+				.mapToObj(i -> new PurposeResult(String.format("P-%03d", i), PurposeStatus.GRANTED, 1)).toList();
+		DeclarationCheck declaration = new DeclarationCheck("I agree", DeclarationWording.PATIENT, false,
+				"a".repeat(64));
+
+		assertThat(ConsentWriter.summary(results, declaration)).hasSizeLessThanOrEqualTo(255).endsWith(";D=" + "a".repeat(16));
+		assertThat(ConsentWriter.summary(results, null)).doesNotContain(";D=");
+	}
+
+	@Test
+	@DisplayName("C1 (004): a requested SMS is recorded inside the save transaction")
+	void notifyIsRecordedInTheSave() {
+		NotifyInput notify = new NotifyInput(NotifyChannel.SMS, "9876543210");
+		write(ConsentFixtures.request().notifyBy(notify).build());
+
+		String consentId = savedConsent().getConsentId();
+		verify(notifier).record(consentId, notify, ConsentFixtures.WORKER);
 	}
 
 	@Test

@@ -29,7 +29,7 @@ import com.iemr.consent.data.evidence.EvidenceType;
 /**
  * One uploaded proof file. The bytes are never logged.
  *
- * @param type        VOICE_CLIP, PATIENT_PHOTO or SIGNED_FORM_PHOTO
+ * @param type        VOICE_CLIP or SIGNED_FORM_PHOTO (PATIENT_PHOTO is refused since feature 004)
  * @param sha256      fingerprint computed by the browser
  * @param durationSec voice clip length
  * @param contentType file content type

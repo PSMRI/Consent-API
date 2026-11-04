@@ -38,11 +38,13 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.iemr.consent.repository.notify.ConsentNotificationRepository;
 import com.iemr.consent.repository.audit.AuditLogRepository;
 import com.iemr.consent.repository.consent.ConsentPurposeRepository;
 import com.iemr.consent.repository.consent.ConsentRepository;
@@ -109,6 +111,12 @@ class ApiDocsAvailabilityTest {
 
 	@MockBean
 	AccessGrantRepository accessGrantRepository;
+
+	@MockBean
+	ConsentNotificationRepository consentNotificationRepository;
+
+	@MockBean
+	PlatformTransactionManager transactionManager;
 
 	@Nested
 	@TestPropertySource(properties = { "springdoc.api-docs.enabled=true", "springdoc.swagger-ui.enabled=true" })

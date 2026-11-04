@@ -30,8 +30,10 @@ import com.iemr.consent.service.notice.PublishedNotice;
 /**
  * A save that passed every check.
  *
- * @param notice   the published notice and language shown
- * @param evidence all evidence files the save links (request and guardian)
+ * @param notice      the published notice and language shown
+ * @param evidence    all evidence files the save links (request and guardian)
+ * @param declaration the declaration to store, or {@code null} for a decline (feature 004)
  */
-public record ValidatedConsent(PublishedNotice notice, List<ConsentEvidence> evidence) {
+public record ValidatedConsent(PublishedNotice notice, List<ConsentEvidence> evidence,
+		DeclarationCheck declaration) {
 }

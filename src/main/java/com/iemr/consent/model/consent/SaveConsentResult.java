@@ -31,7 +31,9 @@ import com.iemr.consent.data.consent.SyncStatus;
  *
  * @param consentId  new consent event id
  * @param syncStatus SYNCED for online capture
- * @param purposes   one per decision, in request order
+ * @param purposes     one per decision, in request order
+ * @param notification outcome of the consent SMS (feature 004)
  */
-public record SaveConsentResult(String consentId, SyncStatus syncStatus, List<PurposeResult> purposes) {
+public record SaveConsentResult(String consentId, SyncStatus syncStatus, List<PurposeResult> purposes,
+		NotificationResult notification) {
 }

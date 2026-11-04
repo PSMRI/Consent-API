@@ -32,11 +32,17 @@ import com.iemr.consent.model.notice.NoticeLanguage;
 /** Published notices (FR-001 – FR-003). */
 public interface NoticeService {
 
-	/** Languages of the active notice for a context; empty when none is published. */
-	List<NoticeLanguage> languages(NoticeContext context);
+	/**
+	 * Languages of the active central notice for a context, plus those of the project's own notice when
+	 * {@code projectId} is given (each code once, the project's entry winning); empty when none is published.
+	 */
+	List<NoticeLanguage> languages(NoticeContext context, Integer projectId);
 
-	/** The active notice in one language; {@code NOT_FOUND} when there is none. */
-	ActiveNotice activeNotice(NoticeContext context, String languageCode);
+	/**
+	 * The project's own notice in that language when {@code projectId} is given and it is published in it,
+	 * otherwise the central notice; {@code NOT_FOUND} when neither exists.
+	 */
+	ActiveNotice activeNotice(NoticeContext context, String languageCode, Integer projectId);
 
 	/** A notice version for a save, only if it is still published and has this language. */
 	Optional<PublishedNotice> findPublished(Long noticeVersionId, String languageCode);

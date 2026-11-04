@@ -24,6 +24,8 @@ package com.iemr.consent.model.notice;
 
 import java.util.List;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
+
 /**
  * The active notice for a context and language (front-end API 3). {@code noticeVersionId} and
  * {@code textHash} are sent back when saving, to prove which text was shown. Never logged.
@@ -40,10 +42,16 @@ import java.util.List;
  * @param withdrawalInfo  how to withdraw
  * @param grievanceInfo   how to complain
  * @param purposes        mandatory first, then by display order
+ * @param declaration     patient declaration; omitted when not published (app default wording, feature 004)
+ * @param representativeDeclaration guardian / representative wording; omitted when not published
+ * @param grievance       grievance officer's contact, or {@code null}
  */
 public record ActiveNotice(Long noticeVersionId, String languageCode, String context, String body,
 		String textHash, String audioUrl, String dataItems, String retention, String recipients,
-		String withdrawalInfo, String grievanceInfo, List<NoticePurposeView> purposes) {
+		String withdrawalInfo, String grievanceInfo, List<NoticePurposeView> purposes,
+		@JsonInclude(JsonInclude.Include.NON_NULL) String declaration,
+		@JsonInclude(JsonInclude.Include.NON_NULL) String representativeDeclaration,
+		GrievanceContact grievance) {
 
 	@Override
 	public String toString() {

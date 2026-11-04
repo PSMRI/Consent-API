@@ -31,9 +31,18 @@ import com.iemr.consent.data.evidence.ConsentEvidence;
 import com.iemr.consent.model.consent.SaveConsentRequest;
 import com.iemr.consent.utils.auth.AuthenticatedUser;
 
-/** READ_ALOUD mode: the worker confirms the notice was read out (H2). */
+/**
+ * READ_ALOUD mode ("Read aloud + recorded agreement"): the worker confirms the notice was read out or its audio played
+ * (H2); an optional recording of the patient's agreement is at most 120 s (feature 004).
+ */
 @Component
 public class ReadAloudProofRule implements ModeProofRule {
+
+	private final RecordingRule recordingRule;
+
+	public ReadAloudProofRule(RecordingRule recordingRule) {
+		this.recordingRule = recordingRule;
+	}
 
 	@Override
 	public ConsentMode mode() {
@@ -45,5 +54,6 @@ public class ReadAloudProofRule implements ModeProofRule {
 		if (request.proof() == null || !Boolean.TRUE.equals(request.proof().workerConfirmed())) {
 			throw ConsentRules.invalid("proof.workerConfirmed", "worker must confirm the reading");
 		}
+		recordingRule.checkReadAloud(evidence);
 	}
 }

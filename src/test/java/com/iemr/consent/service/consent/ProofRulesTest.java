@@ -46,6 +46,7 @@ import com.iemr.consent.model.otp.OtpReason;
 import com.iemr.consent.service.otp.OtpChallenge;
 import com.iemr.consent.service.otp.OtpService;
 import com.iemr.consent.support.ConsentFixtures;
+import com.iemr.consent.support.TestFixtures;
 import com.iemr.consent.utils.crypto.Sha256;
 import com.iemr.consent.utils.exception.ConsentApiException;
 import com.iemr.consent.utils.exception.ErrorCode;
@@ -53,6 +54,14 @@ import com.iemr.consent.utils.exception.ErrorCode;
 class ProofRulesTest {
 
 	private static final List<ConsentEvidence> NONE = List.of();
+
+	private static final RecordingRule RECORDINGS = new RecordingRule(TestFixtures.consentProperties());
+
+	private static ConsentEvidence recording(String seconds) {
+		ConsentEvidence e = file(EvidenceType.VOICE_CLIP);
+		e.setDurationSec(new java.math.BigDecimal(seconds));
+		return e;
+	}
 
 	private static ConsentEvidence file(EvidenceType type) {
 		ConsentEvidence e = new ConsentEvidence();
@@ -76,10 +85,11 @@ class ProofRulesTest {
 	@Test
 	void ruleModes() {
 		OtpService otp = mock(OtpService.class);
-		assertThat(List.of(new OtpProofRule(otp).mode(), new VoiceClipProofRule().mode(),
-				new SignaturePhotoProofRule().mode(), new WitnessedProofRule().mode(), new ReadAloudProofRule().mode()))
-				.containsExactly(ConsentMode.OTP, ConsentMode.VOICE_CLIP, ConsentMode.SIGNATURE_PHOTO,
-						ConsentMode.WITNESSED, ConsentMode.READ_ALOUD);
+		assertThat(List.of(new OtpProofRule(otp).mode(), new SelfReadProofRule(RECORDINGS).mode(),
+				new SignaturePhotoProofRule().mode(), new WitnessedProofRule().mode(),
+				new ReadAloudProofRule(RECORDINGS).mode()))
+				.as("004: five modes, no VOICE_CLIP rule").containsExactly(ConsentMode.OTP, ConsentMode.SELF_READ,
+						ConsentMode.SIGNATURE_PHOTO, ConsentMode.WITNESSED, ConsentMode.READ_ALOUD);
 	}
 
 	@Test
@@ -98,28 +108,30 @@ class ProofRulesTest {
 	}
 
 	@Test
-	@DisplayName("M3: voice-clip mode needs exactly one voice clip")
-	void voiceClip() {
-		VoiceClipProofRule rule = new VoiceClipProofRule();
+	@DisplayName("M3 (004): patient-read-it needs no proof; an optional recording is at most 60 s")
+	void selfRead() {
+		SelfReadProofRule rule = new SelfReadProofRule(RECORDINGS);
 		SaveConsentRequest request = ConsentFixtures.request().build();
 
+		assertThatNoException().isThrownBy(() -> rule.check(request, ConsentFixtures.WORKER, NONE));
 		assertThatNoException().isThrownBy(() -> rule.check(request, ConsentFixtures.WORKER,
-				List.of(file(EvidenceType.VOICE_CLIP), file(EvidenceType.PATIENT_PHOTO))));
-		assertInvalid(() -> rule.check(request, ConsentFixtures.WORKER, NONE), "evidenceIds");
-		assertInvalid(() -> rule.check(request, ConsentFixtures.WORKER,
-				List.of(file(EvidenceType.VOICE_CLIP), file(EvidenceType.VOICE_CLIP))), "evidenceIds");
+				List.of(recording("60"))));
+		assertInvalid(() -> rule.check(request, ConsentFixtures.WORKER, List.of(recording("61"))), "evidenceIds");
 	}
 
 	@Test
-	@DisplayName("M3: signature-photo mode needs a photo")
+	@DisplayName("M3 (004): signed-form mode needs exactly one signed-form photo, never a patient photo")
 	void signaturePhoto() {
 		SignaturePhotoProofRule rule = new SignaturePhotoProofRule();
 		SaveConsentRequest request = ConsentFixtures.request().build();
 
 		assertThatNoException().isThrownBy(() -> rule.check(request, ConsentFixtures.WORKER,
 				List.of(file(EvidenceType.SIGNED_FORM_PHOTO))));
-		assertInvalid(() -> rule.check(request, ConsentFixtures.WORKER, List.of(file(EvidenceType.VOICE_CLIP))),
-				"evidenceIds");
+		for (List<ConsentEvidence> files : List.of(NONE, List.of(file(EvidenceType.VOICE_CLIP)),
+				List.of(file(EvidenceType.PATIENT_PHOTO)),
+				List.of(file(EvidenceType.SIGNED_FORM_PHOTO), file(EvidenceType.SIGNED_FORM_PHOTO)))) {
+			assertInvalid(() -> rule.check(request, ConsentFixtures.WORKER, files), "evidenceIds");
+		}
 	}
 
 	@Test
@@ -137,12 +149,16 @@ class ProofRulesTest {
 	}
 
 	@Test
-	@DisplayName("H2: read-aloud mode needs the worker's confirmation")
+	@DisplayName("H2 / M3: read-aloud needs the worker's confirmation; an optional recording is at most 120 s")
 	void readAloud() {
-		ReadAloudProofRule rule = new ReadAloudProofRule();
+		ReadAloudProofRule rule = new ReadAloudProofRule(RECORDINGS);
+		SaveConsentRequest confirmed = ConsentFixtures.request().proof(new Proof(true, null, null, null)).build();
 
-		assertThatNoException().isThrownBy(() -> rule.check(ConsentFixtures.request()
-				.proof(new Proof(true, null, null, null)).build(), ConsentFixtures.WORKER, NONE));
+		assertThatNoException().isThrownBy(() -> rule.check(confirmed, ConsentFixtures.WORKER, NONE));
+		assertThatNoException().isThrownBy(() -> rule.check(confirmed, ConsentFixtures.WORKER,
+				List.of(recording("90"))));
+		assertInvalid(() -> rule.check(confirmed, ConsentFixtures.WORKER, List.of(recording("121"))),
+				"evidenceIds");
 		for (Proof proof : new Proof[] { null, new Proof(false, null, null, null), new Proof(null, null, null, null) }) {
 			assertInvalid(() -> rule.check(ConsentFixtures.request().proof(proof).build(), ConsentFixtures.WORKER,
 					NONE), "proof.workerConfirmed");

@@ -56,9 +56,17 @@ class ConsentPropertiesTest {
 			assertThat(properties.redis().timeoutMs()).isEqualTo(1500L);
 			assertThat(properties.rateLimit().retryAfterSeconds()).isEqualTo(60L);
 			assertThat(properties.evidence().maxBytes()).isEqualTo(10485760L);
-			assertThat(properties.evidence().voiceMinSeconds()).isEqualTo(30);
-			assertThat(properties.evidence().voiceMaxSeconds()).isEqualTo(60);
-			assertThat(properties.evidence().allowedContentTypes()).contains("audio/webm", "image/png");
+			assertThat(properties.evidence().voiceMinSeconds()).isEqualTo(2);
+			assertThat(properties.evidence().voiceMaxSeconds()).isEqualTo(120);
+			assertThat(properties.evidence().allowedContentTypes()).contains("audio/webm", "audio/x-m4a",
+					"image/png");
+			assertThat(properties.evidence().maxAudioBytes()).isEqualTo(5242880L);
+			assertThat(properties.evidence().maxPhotoBytes()).isEqualTo(2097152L);
+			assertThat(properties.evidence().selfReadMaxSeconds()).isEqualTo(60);
+			assertThat(properties.evidence().unlinkedRetentionHours()).isEqualTo(24);
+			assertThat(properties.evidence().cleanupCron()).isEqualTo("0 0 * * * ?");
+			assertThat(properties.sms().template()).contains("{consentId}", "{grievance}");
+			assertThat(properties.sms().timeoutMs()).isEqualTo(2000);
 			assertThat(properties.capture().maxSkewMinutes()).isEqualTo(1440L);
 			assertThat(properties.commonApi().timeoutMs()).isEqualTo(3000);
 			assertThat(properties.notice().audioBaseUrl()).isEmpty();
@@ -95,7 +103,10 @@ class ConsentPropertiesTest {
 		"consent.health.check-timeout-ms=1901", "consent.redis.timeout-ms=0",
 		"consent.rate-limit.retry-after-seconds=0", "consent.evidence.voice-min-seconds=0",
 		"consent.otp.max-attempts=0", "consent.otp.ttl-seconds=10", "consent.capture.max-skew-minutes=0",
-		"consent.access-grant.max-days=0", "consent.access-grant.replay-hours=0" })
+		"consent.access-grant.max-days=0", "consent.access-grant.replay-hours=0",
+		"consent.evidence.max-audio-bytes=0", "consent.evidence.max-photo-bytes=0",
+		"consent.evidence.self-read-max-seconds=0", "consent.evidence.unlinked-retention-hours=0",
+		"consent.evidence.cleanup-cron=", "consent.sms.template=", "consent.sms.timeout-ms=0" })
 	void rejectsOutOfRangeValues(String setting) {
 		runner.withPropertyValues(setting).run(context -> assertThat(context).hasFailed().getFailure()
 				.hasRootCauseInstanceOf(BindValidationException.class));

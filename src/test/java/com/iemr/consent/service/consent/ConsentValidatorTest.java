@@ -36,10 +36,15 @@ import java.util.Optional;
 import java.util.UUID;
 
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 
+import com.iemr.consent.model.consent.Proof;
+import com.iemr.consent.data.consent.ConsentingParty;
+import com.iemr.consent.data.consent.DeclarationWording;
+import com.iemr.consent.data.evidence.EvidenceType;
 import com.iemr.consent.data.consent.ConsentMode;
 import com.iemr.consent.data.consent.Decision;
 import com.iemr.consent.data.consent.EventType;
@@ -49,6 +54,7 @@ import com.iemr.consent.model.consent.GuardianInfo;
 import com.iemr.consent.model.consent.SaveConsentRequest;
 import com.iemr.consent.service.evidence.EvidenceService;
 import com.iemr.consent.service.notice.NoticeService;
+import com.iemr.consent.service.notice.PublishedNotice;
 import com.iemr.consent.support.ConsentFixtures;
 import com.iemr.consent.utils.exception.ConsentApiException;
 import com.iemr.consent.utils.exception.ErrorCode;
@@ -62,7 +68,9 @@ class ConsentValidatorTest {
 
 	private GuardianRule guardianRule;
 
-	private ModeProofRule voiceRule;
+	private ModeProofRule selfRule;
+
+	private ModeProofRule witnessRule;
 
 	private ConsentValidator validator;
 
@@ -71,12 +79,15 @@ class ConsentValidatorTest {
 		notices = mock(NoticeService.class);
 		evidence = mock(EvidenceService.class);
 		guardianRule = mock(GuardianRule.class);
-		voiceRule = mock(ModeProofRule.class);
-		when(voiceRule.mode()).thenReturn(ConsentMode.VOICE_CLIP);
+		selfRule = mock(ModeProofRule.class);
+		when(selfRule.mode()).thenReturn(ConsentMode.SELF_READ);
+		witnessRule = mock(ModeProofRule.class);
+		when(witnessRule.mode()).thenReturn(ConsentMode.WITNESSED);
 		when(notices.findPublished(ConsentFixtures.NOTICE_ID, "hi"))
 				.thenReturn(Optional.of(ConsentFixtures.publishedNotice()));
 		when(evidence.requireLinkable(anyList(), any())).thenReturn(List.of());
-		validator = new ConsentValidator(notices, evidence, guardianRule, List.of(voiceRule));
+		validator = new ConsentValidator(notices, evidence, guardianRule, new DeclarationRule(),
+				List.of(selfRule, witnessRule));
 	}
 
 	private static void assertError(Runnable call, ErrorCode code) {
@@ -85,10 +96,12 @@ class ConsentValidatorTest {
 	}
 
 	@Test
-	void selfReadAcceptNeedsNoProof() {
-		ValidatedConsent result = validator.validate(ConsentFixtures.request().build(), ConsentFixtures.WORKER);
+	void selfReadAcceptRunsItsRule() {
+		SaveConsentRequest request = ConsentFixtures.request().build();
+		ValidatedConsent result = validator.validate(request, ConsentFixtures.WORKER);
 
 		assertThat(result.notice().purposes()).hasSize(2);
+		verify(selfRule).check(request, ConsentFixtures.WORKER, List.of());
 		verify(guardianRule, never()).check(any(), any());
 	}
 
@@ -120,6 +133,22 @@ class ConsentValidatorTest {
 	}
 
 	@Test
+	@DisplayName("FR-012a: a project notice is only valid for its own project; a central notice for any")
+	void projectNoticeOnlyForItsProject() {
+		PublishedNotice central = ConsentFixtures.publishedNotice();
+		PublishedNotice project = ConsentFixtures.publishedNotice();
+		project.notice().setProjectId(3);
+		when(notices.findPublished(ConsentFixtures.NOTICE_ID, "hi")).thenReturn(Optional.of(project));
+		SaveConsentRequest forProject12 = ConsentFixtures.request().build();
+
+		assertError(() -> validator.validate(forProject12, ConsentFixtures.WORKER), ErrorCode.STALE_VERSION);
+		project.notice().setProjectId(12);
+		assertThat(validator.validate(forProject12, ConsentFixtures.WORKER)).isNotNull();
+		when(notices.findPublished(ConsentFixtures.NOTICE_ID, "hi")).thenReturn(Optional.of(central));
+		assertThat(validator.validate(forProject12, ConsentFixtures.WORKER).declaration().appDefault()).isTrue();
+	}
+
+	@Test
 	void decisionsMustCoverExactlyTheNoticePurposesOnce() {
 		List<List<DecisionItem>> bad = List.of(List.of(new DecisionItem("P-REG", Decision.GRANT)),
 				List.of(new DecisionItem("P-REG", Decision.GRANT), new DecisionItem("P-REM", Decision.GRANT),
@@ -145,9 +174,9 @@ class ConsentValidatorTest {
 
 	@Test
 	void declineWithAModeSkipsTheProofRule() {
-		validator.validate(ConsentFixtures.request().mode(ConsentMode.VOICE_CLIP)
+		validator.validate(ConsentFixtures.request().mode(ConsentMode.SELF_READ)
 				.decisions(Decision.DENY, Decision.DENY).build(), ConsentFixtures.WORKER);
-		verify(voiceRule, never()).check(any(), any(), any());
+		verify(selfRule, never()).check(any(), any(), any());
 	}
 
 	@Test
@@ -155,15 +184,15 @@ class ConsentValidatorTest {
 		UUID clip = UUID.randomUUID();
 		List<ConsentEvidence> files = List.of(new ConsentEvidence());
 		when(evidence.requireLinkable(List.of(clip), ConsentFixtures.WORKER)).thenReturn(files);
-		SaveConsentRequest request = ConsentFixtures.request().mode(ConsentMode.VOICE_CLIP).evidence(List.of(clip))
+		SaveConsentRequest request = ConsentFixtures.request().mode(ConsentMode.WITNESSED).evidence(List.of(clip))
 				.build();
 
 		assertThat(validator.validate(request, ConsentFixtures.WORKER).evidence()).isEqualTo(files);
-		verify(voiceRule).check(request, ConsentFixtures.WORKER, files);
+		verify(witnessRule).check(request, ConsentFixtures.WORKER, files);
 	}
 
 	@ParameterizedTest
-	@EnumSource(value = ConsentMode.class, names = { "OTP", "WITNESSED", "READ_ALOUD", "SIGNATURE_PHOTO" })
+	@EnumSource(value = ConsentMode.class, names = { "OTP", "READ_ALOUD", "SIGNATURE_PHOTO", "VOICE_CLIP" })
 	void modeWithoutARuleIsRefused(ConsentMode mode) {
 		assertError(() -> validator.validate(ConsentFixtures.request().mode(mode).build(), ConsentFixtures.WORKER),
 				ErrorCode.VALIDATION_FAILED);
@@ -188,5 +217,70 @@ class ConsentValidatorTest {
 		SaveConsentRequest request = ConsentFixtures.request().guardian(ConsentFixtures.guardianOtp(UUID.randomUUID()))
 				.build();
 		assertThat(validator.validate(request, ConsentFixtures.WORKER).evidence()).isEmpty();
+	}
+
+	@Test
+	@DisplayName("US3 (004): mode VOICE_CLIP is no longer supported")
+	void voiceClipModeIsRefused() {
+		assertThatThrownBy(() -> validator.validate(ConsentFixtures.request().mode(ConsentMode.VOICE_CLIP).build(),
+				ConsentFixtures.WORKER)).isInstanceOf(ConsentApiException.class).extracting("details")
+				.isEqualTo(List.of(new FieldErrorDetail("mode", "is not supported")));
+	}
+
+	@ParameterizedTest
+	@EnumSource(value = ConsentMode.class, names = { "SELF_READ", "WITNESSED" })
+	@DisplayName("US3 (004): more than one recording is refused in every mode, even on a decline")
+	void atMostOneRecordingInAnyMode(ConsentMode mode) {
+		ConsentEvidence clip = new ConsentEvidence();
+		clip.setType(EvidenceType.VOICE_CLIP);
+		when(evidence.requireLinkable(anyList(), any())).thenReturn(List.of(clip, clip));
+
+		assertThatThrownBy(() -> validator.validate(ConsentFixtures.request().mode(mode).build(),
+				ConsentFixtures.WORKER)).isInstanceOf(ConsentApiException.class).extracting("details")
+				.isEqualTo(List.of(new FieldErrorDetail("evidenceIds", "must contain at most one recording")));
+		assertThatThrownBy(() -> validator.validate(ConsentFixtures.request().mode(mode)
+				.decisions(Decision.DENY, Decision.DENY).build(), ConsentFixtures.WORKER))
+				.isInstanceOf(ConsentApiException.class);
+		verify(selfRule, never()).check(any(), any(), any());
+	}
+
+	@Test
+	@DisplayName("C6 / M3: WITNESSED by the patient is a witness to the patient's own consent")
+	void witnessedBySelf() {
+		SaveConsentRequest request = ConsentFixtures.request().mode(ConsentMode.WITNESSED)
+				.proof(new Proof(null, "Gita Bai", "Neighbour", null)).build();
+
+		assertThat(validator.validate(request, ConsentFixtures.WORKER).declaration().wording())
+				.isEqualTo(DeclarationWording.PATIENT);
+		verify(witnessRule).check(request, ConsentFixtures.WORKER, List.of());
+		verify(guardianRule, never()).check(any(), any());
+	}
+
+	@Test
+	@DisplayName("C6: WITNESSED by a guardian runs every guardian rule and needs the REPRESENTATIVE wording")
+	void witnessedByGuardian() {
+		SaveConsentRequest request = ConsentFixtures.request().mode(ConsentMode.WITNESSED)
+				.proof(new Proof(null, "Gita Bai", "Neighbour", null))
+				.guardian(ConsentFixtures.guardianOtp(UUID.randomUUID())).build();
+
+		assertThat(validator.validate(request, ConsentFixtures.WORKER).declaration().wording())
+				.isEqualTo(DeclarationWording.REPRESENTATIVE);
+		verify(guardianRule).check(request, ConsentFixtures.WORKER);
+
+		SaveConsentRequest patientWording = ConsentFixtures.request().mode(ConsentMode.WITNESSED)
+				.guardian(ConsentFixtures.guardianOtp(UUID.randomUUID()))
+				.declaration(ConsentFixtures.defaultDeclaration(ConsentingParty.SELF)).build();
+		assertError(() -> validator.validate(patientWording, ConsentFixtures.WORKER), ErrorCode.VALIDATION_FAILED);
+	}
+
+	@Test
+	@DisplayName("C6: WITNESSED by a guardian without guardian details is refused by the guardian rule")
+	void witnessedByGuardianWithoutDetails() {
+		SaveConsentRequest request = ConsentFixtures.request().mode(ConsentMode.WITNESSED)
+				.guardian(ConsentFixtures.guardianOtp(null)).build();
+		org.mockito.Mockito.doThrow(new ConsentApiException(ErrorCode.VALIDATION_FAILED)).when(guardianRule)
+				.check(request, ConsentFixtures.WORKER);
+
+		assertError(() -> validator.validate(request, ConsentFixtures.WORKER), ErrorCode.VALIDATION_FAILED);
 	}
 }

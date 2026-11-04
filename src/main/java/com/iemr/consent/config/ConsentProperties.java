@@ -50,7 +50,7 @@ public record ConsentProperties(@Valid @DefaultValue Request request, @Valid @De
 		@Valid @DefaultValue Evidence evidence, @Valid @DefaultValue Capture capture,
 		@Valid @DefaultValue CommonApi commonApi, @Valid @DefaultValue Notice notice,
 		@Valid @DefaultValue Otp otp, @Valid @DefaultValue Encryption encryption,
-		@Valid @DefaultValue AccessGrant accessGrant) {
+		@Valid @DefaultValue AccessGrant accessGrant, @Valid @DefaultValue Sms sms) {
 
 	/** @param maxBodyBytes largest accepted request body, in bytes */
 	public record Request(@DefaultValue("1048576") @Positive long maxBodyBytes) {
@@ -69,19 +69,30 @@ public record ConsentProperties(@Valid @DefaultValue Request request, @Valid @De
 	}
 
 	/**
-	 * Proof files (TODO-DPO limits; voice length per proposal §3.1, 30–60 s).
+	 * Proof files (TODO-DPO limits; reviewed list of 3 Nov 2026, feature 004).
 	 *
-	 * @param storageDir          directory of the encrypted evidence store
-	 * @param maxBytes            largest accepted file
-	 * @param voiceMinSeconds     shortest voice clip
-	 * @param voiceMaxSeconds     longest voice clip
-	 * @param allowedContentTypes accepted file content types
+	 * @param storageDir             directory of the encrypted evidence store
+	 * @param maxBytes               largest accepted upload request (size filter and multipart ceiling)
+	 * @param voiceMinSeconds        shortest recording
+	 * @param voiceMaxSeconds        longest recording (READ_ALOUD limit at save)
+	 * @param allowedContentTypes    accepted file content types
+	 * @param maxAudioBytes          largest recording
+	 * @param maxPhotoBytes          largest signed-form photo
+	 * @param selfReadMaxSeconds     longest recording linked to a SELF_READ consent
+	 * @param unlinkedRetentionHours unlinked evidence older than this is removed by the clean-up job
+	 * @param cleanupCron            Quartz cron of the clean-up job
 	 */
 	public record Evidence(@NotBlank String storageDir, @DefaultValue("10485760") @Positive long maxBytes,
-			@DefaultValue("30") @Min(1) int voiceMinSeconds,
-			@DefaultValue("60") @Min(1) int voiceMaxSeconds,
-			@DefaultValue({ "audio/webm", "audio/ogg", "audio/mpeg", "audio/wav", "image/jpeg",
-				"image/png" }) @NotEmpty List<String> allowedContentTypes) {
+			@DefaultValue("2") @Min(1) int voiceMinSeconds,
+			@DefaultValue("120") @Min(1) int voiceMaxSeconds,
+			@DefaultValue({ "audio/webm", "audio/ogg", "audio/mpeg", "audio/wav", "audio/mp4",
+				"audio/x-m4a", "audio/x-wav", "audio/wave", "image/jpeg", "image/png" })
+			@NotEmpty List<String> allowedContentTypes,
+			@DefaultValue("5242880") @Positive long maxAudioBytes,
+			@DefaultValue("2097152") @Positive long maxPhotoBytes,
+			@DefaultValue("60") @Min(1) int selfReadMaxSeconds,
+			@DefaultValue("24") @Positive int unlinkedRetentionHours,
+			@DefaultValue("0 0 * * * ?") @NotBlank String cleanupCron) {
 	}
 
 	/** @param maxSkewMinutes device capture time further than this from server time is flagged (TODO-DPO) */
@@ -123,5 +134,21 @@ public record ConsentProperties(@Valid @DefaultValue Request request, @Valid @De
 	 */
 	public record AccessGrant(@DefaultValue("30") @Min(1) int maxDays,
 			@DefaultValue("24") @Min(1) int replayHours) {
+	}
+
+	/** Default consent SMS text (TODO-LEGAL). */
+	public static final String DEFAULT_SMS_TEMPLATE = "Your consent is recorded. Consent ID: {consentId}. "
+			+ "Grievance: {grievance}";
+
+	/**
+	 * Consent SMS through Common-API (feature 004).
+	 *
+	 * @param template  SMS text with {@code {consentId}} and {@code {grievance}} (TODO-LEGAL wording; must not
+	 *                  name a programme or health condition)
+	 * @param timeoutMs connect and read timeout of the SMS call; when reached the status is FAILED (TODO-DPO)
+	 */
+	public record Sms(
+			@DefaultValue(DEFAULT_SMS_TEMPLATE) @NotBlank String template,
+			@DefaultValue("2000") @Positive int timeoutMs) {
 	}
 }

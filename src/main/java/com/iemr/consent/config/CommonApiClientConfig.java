@@ -38,4 +38,13 @@ public class CommonApiClientConfig {
 		factory.setReadTimeout(properties.commonApi().timeoutMs());
 		return RestClient.builder().baseUrl(properties.commonApi().baseUrl()).requestFactory(factory).build();
 	}
+
+	/** Common-API client for the consent SMS, with its own shorter timeout (feature 004, FR-016). */
+	@Bean
+	public RestClient commonApiSmsRestClient(ConsentProperties properties) {
+		SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
+		factory.setConnectTimeout(properties.sms().timeoutMs());
+		factory.setReadTimeout(properties.sms().timeoutMs());
+		return RestClient.builder().baseUrl(properties.commonApi().baseUrl()).requestFactory(factory).build();
+	}
 }

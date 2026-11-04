@@ -73,4 +73,23 @@ public class Notice extends AuditColumns {
 
 	@Column(name = "published_at")
 	private Instant publishedAt;
+
+	/** {@code null} = central notice; otherwise the project that published it (feature 004). */
+	@Column(name = "project_id")
+	private Integer projectId;
+
+	@Column(name = "grievance_officer_name")
+	private String grievanceOfficerName;
+
+	@Column(name = "grievance_phone")
+	private String grievancePhone;
+
+	@Column(name = "grievance_email")
+	private String grievanceEmail;
+
+	@Column(name = "grievance_address")
+	private String grievanceAddress;
+
+	@Column(name = "grievance_office_hours")
+	private String grievanceOfficeHours;
 }

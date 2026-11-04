@@ -22,10 +22,13 @@
 
 package com.iemr.consent.data.evidence;
 
-/** Kind of evidence row: uploaded files, and proof details written at save. */
+/**
+ * Kind of evidence row: uploaded files, and proof details written at save. {@code PATIENT_PHOTO} is kept only so
+ * rows saved before feature 004 still load; new uploads are VOICE_CLIP or SIGNED_FORM_PHOTO.
+ */
 public enum EvidenceType {
 	VOICE_CLIP(true), PATIENT_PHOTO(true), SIGNED_FORM_PHOTO(true), WITNESS(false), WORKER_CONFIRMATION(false),
-	OTP(false), GUARDIAN_WITNESS(false);
+	OTP(false), GUARDIAN_WITNESS(false), DECLARATION(false);
 
 	private final boolean file;
 
@@ -38,8 +41,8 @@ public enum EvidenceType {
 		return file;
 	}
 
-	/** {@code true} for the two photo types of the SIGNATURE_PHOTO mode. */
-	public boolean isPhoto() {
-		return this == PATIENT_PHOTO || this == SIGNED_FORM_PHOTO;
+	/** {@code true} for the file types the evidence endpoint accepts now (reviewed list, feature 004). */
+	public boolean isUploadable() {
+		return this == VOICE_CLIP || this == SIGNED_FORM_PHOTO;
 	}
 }

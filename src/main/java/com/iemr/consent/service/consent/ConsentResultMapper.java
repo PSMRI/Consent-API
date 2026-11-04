@@ -28,6 +28,7 @@ import com.iemr.consent.data.consent.Consent;
 import com.iemr.consent.data.consent.ConsentPurpose;
 import com.iemr.consent.data.consent.Decision;
 import com.iemr.consent.data.consent.PurposeStatus;
+import com.iemr.consent.model.consent.NotificationResult;
 import com.iemr.consent.model.consent.PurposeResult;
 import com.iemr.consent.model.consent.SaveConsentResult;
 
@@ -41,10 +42,11 @@ final class ConsentResultMapper {
 	private ConsentResultMapper() {
 	}
 
-	static SaveConsentResult fromStored(Consent consent, List<ConsentPurpose> rows) {
+	static SaveConsentResult fromStored(Consent consent, List<ConsentPurpose> rows,
+			NotificationResult notification) {
 		List<PurposeResult> purposes = rows.stream().map(row -> new PurposeResult(row.getPurposeCode(),
 				statusOf(row.getDecision()), row.getVersionNo())).toList();
-		return new SaveConsentResult(consent.getConsentId(), consent.getSyncStatus(), purposes);
+		return new SaveConsentResult(consent.getConsentId(), consent.getSyncStatus(), purposes, notification);
 	}
 
 	static PurposeStatus statusOf(Decision decision) {
