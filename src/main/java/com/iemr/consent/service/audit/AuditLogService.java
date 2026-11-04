@@ -53,6 +53,18 @@ public interface AuditLogService {
 	String EVIDENCE_PURGED = "EVIDENCE_PURGED";
 
 	/**
+	 * Audit action for a published notice (feature 006). Its {@code consentId} is null and its purpose summary is
+	 * {@code notice:<id>;project:<id>;context:<ctx>;v:<n>;langs:<codes>;material:<bool>}; no notice text.
+	 */
+	String NOTICE_PUBLISHED = "NOTICE_PUBLISHED";
+
+	/**
+	 * Audit action for a saved notice draft (feature 006). Summary
+	 * {@code notice:<id>;project:<id>;context:<ctx>;v:<n>}; no notice text.
+	 */
+	String NOTICE_DRAFT_SAVED = "NOTICE_DRAFT_SAVED";
+
+	/**
 	 * @param purposeSummary purpose codes with statuses, e.g. {@code P-REG:GRANTED,P-REM:DENIED}; no
 	 *                       personal values
 	 */

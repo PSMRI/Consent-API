@@ -22,6 +22,11 @@
 
 package com.iemr.consent.utils.exception;
 
+import com.iemr.consent.utils.auth.ServiceKeyInterceptor;
+import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
+import org.springframework.web.servlet.config.annotation.InterceptorRegistration;
+import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.verify;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -94,7 +99,8 @@ class ConsentErrorControllerTest {
 
 	@Test
 	void everyFilterIsRegisteredForRequestDispatchOnlyInTheFixedOrder() {
-		WebConfig config = new WebConfig(new CurrentUserArgumentResolver());
+		WebConfig config = new WebConfig(new CurrentUserArgumentResolver(),
+				new ServiceKeyInterceptor(TestFixtures.consentProperties()));
 		List<FilterRegistrationBean<?>> registrations = List.of(
 				config.traceIdFilterRegistration(new TraceIdFilter()),
 				config.requestLoggingFilterRegistration(new RequestLoggingFilter()),
@@ -121,5 +127,17 @@ class ConsentErrorControllerTest {
 		} catch (ReflectiveOperationException e) {
 			throw new IllegalStateException(e);
 		}
+	}
+
+	@Test
+	void theServiceKeyGuardsOnlyTheAdminEndpoints() {
+		ServiceKeyInterceptor interceptor = new ServiceKeyInterceptor(TestFixtures.consentProperties());
+		InterceptorRegistry registry = mock(InterceptorRegistry.class);
+		InterceptorRegistration registration = mock(InterceptorRegistration.class);
+		when(registry.addInterceptor(interceptor)).thenReturn(registration);
+
+		new WebConfig(new CurrentUserArgumentResolver(), interceptor).addInterceptors(registry);
+
+		verify(registration).addPathPatterns("/consent/v1/admin/**");
 	}
 }

@@ -61,6 +61,9 @@ public final class TestFixtures {
 
 	public static final String SMS_TEMPLATE = "Consent ID: {consentId}. Grievance: {grievance}";
 
+	/** Test value of the admin service key (feature 006). */
+	public static final String SERVICE_KEY = "test-service-key-0123456789";
+
 	public static ConsentProperties consentProperties(long maxBodyBytes) {
 		return consentProperties(maxBodyBytes, STORAGE_DIR, "");
 	}
@@ -76,7 +79,8 @@ public final class TestFixtures {
 				new ConsentProperties.Capture(1440L), new ConsentProperties.CommonApi(COMMON_API_URL, 3000),
 				new ConsentProperties.Notice(audioBaseUrl), new ConsentProperties.Otp(300L, 30L, 5),
 				new ConsentProperties.Encryption(ENCRYPTION_KEY), new ConsentProperties.AccessGrant(30, 24),
-				new ConsentProperties.Sms(SMS_TEMPLATE, 2000));
+				new ConsentProperties.Sms(SMS_TEMPLATE, 2000), new ConsentProperties.Admin(SERVICE_KEY),
+				new ConsentProperties.Translation("", 10000));
 	}
 
 	public static SecurityProperties securityProperties() {

@@ -90,4 +90,12 @@ public class NoticeTranslation extends AuditColumns {
 	/** Guardian / representative declaration; {@code null} = use {@link #declaration}. */
 	@Column(name = "representative_declaration")
 	private String representativeDeclaration;
+
+	/** {@code true} when the text was produced by machine translation of the English version (feature 006). */
+	@Column(name = "machine_translated")
+	private boolean machineTranslated;
+
+	/** For machine translations: the English version number they came from; otherwise {@code null}. */
+	@Column(name = "source_version")
+	private Integer sourceVersion;
 }

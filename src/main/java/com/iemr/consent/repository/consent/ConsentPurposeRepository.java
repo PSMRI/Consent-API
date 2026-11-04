@@ -47,6 +47,9 @@ public interface ConsentPurposeRepository extends JpaRepository<ConsentPurpose, 
 	/** A patient's current decisions, one per purpose (not locked; reads only). */
 	List<ConsentPurpose> findByBeneficiaryRegIdAndCurrentTrue(Long beneficiaryRegId);
 
+	/** The current decisions of many patients in one query (API 15 batch, feature 007). */
+	List<ConsentPurpose> findByBeneficiaryRegIdInAndCurrentTrue(Collection<Long> beneficiaryRegIds);
+
 	/** The current decision for a patient and purpose, locked until the transaction ends. */
 	@Lock(LockModeType.PESSIMISTIC_WRITE)
 	@Query("select p from ConsentPurpose p where p.beneficiaryRegId = :ben and p.purposeCode = :code"

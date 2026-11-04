@@ -27,7 +27,9 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
+import java.util.EnumMap;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -105,25 +107,66 @@ public class PendingActionServiceImpl implements PendingActionService {
 	@Transactional(readOnly = true)
 	public List<PendingAction> pending(Long benRegId, NoticeContext context) {
 		List<ConsentPurpose> current = purposeRepository.findByBeneficiaryRegIdAndCurrentTrue(benRegId);
-		List<String> eventIds = current.stream().map(ConsentPurpose::getConsentId).toList();
-		Map<String, Consent> sources = current.isEmpty() ? Map.of()
-				: consentRepository.findByConsentIdIn(eventIds).stream()
-						.collect(Collectors.toMap(Consent::getConsentId, Function.identity()));
+		return evaluate(current, sources(current), context, new Lookups());
+	}
+
+	/**
+	 * API 15: every patient's current decisions and their source events are read in two queries, and the notice
+	 * and guardian look-ups are shared across the page; each patient is then evaluated exactly as by API 9.
+	 */
+	@Override
+	@Transactional(readOnly = true)
+	public Map<Long, List<PendingAction>> pendingFor(Collection<Long> benRegIds, NoticeContext context) {
+		List<ConsentPurpose> all = purposeRepository.findByBeneficiaryRegIdInAndCurrentTrue(benRegIds);
+		Map<Long, List<ConsentPurpose>> byPatient = all.stream()
+				.collect(Collectors.groupingBy(ConsentPurpose::getBeneficiaryRegId));
+		Map<String, Consent> sources = sources(all);
+		Lookups lookups = new Lookups();
+		Map<Long, List<PendingAction>> result = new LinkedHashMap<>();
+		for (Long benRegId : benRegIds) {
+			List<ConsentPurpose> rows = byPatient.getOrDefault(benRegId, List.of());
+			result.put(benRegId, evaluate(rows, sources, context, lookups));
+		}
+		return result;
+	}
+
+	/** Look-ups that do not depend on the patient, shared by every patient of one request. */
+	private static final class Lookups {
+
+		private final Map<NoticeContext, Optional<List<String>>> noticePurposes =
+				new EnumMap<>(NoticeContext.class);
+
+		private final Map<Long, Optional<Instant>> newerNotice = new HashMap<>();
+
+		private final Map<String, Optional<Instant>> linkEnds = new HashMap<>();
+	}
+
+	/** The events the current decisions came from; no query when there are none. */
+	private Map<String, Consent> sources(List<ConsentPurpose> current) {
+		if (current.isEmpty()) {
+			return Map.of();
+		}
+		List<String> eventIds = current.stream().map(ConsentPurpose::getConsentId).distinct().toList();
+		return consentRepository.findByConsentIdIn(eventIds).stream()
+				.collect(Collectors.toMap(Consent::getConsentId, Function.identity()));
+	}
+
+	/** One patient's pending actions (API 9 rules). */
+	private List<PendingAction> evaluate(List<ConsentPurpose> current, Map<String, Consent> sources,
+			NoticeContext context, Lookups lookups) {
 		List<PendingAction> actions = new ArrayList<>();
-		missing(context, current).ifPresent(actions::add);
+		missing(context, current, lookups).ifPresent(actions::add);
 		Map<String, Instant> legacy = new TreeMap<>();
 		Map<String, Instant> reconsent = new TreeMap<>();
 		Map<String, Instant> guardianEnded = new TreeMap<>();
-		Map<Long, Optional<Instant>> newerNotice = new HashMap<>();
-		Map<String, Optional<Instant>> linkEnds = new HashMap<>();
 		for (ConsentPurpose row : current) {
 			Consent source = sources.get(row.getConsentId());
 			if (source.getEventType() == EventType.LEGACY) {
 				legacy.put(row.getPurposeCode(), source.getCapturedAt());
 			}
-			reconsentDue(row, source, newerNotice).ifPresent(due -> reconsent.put(row.getPurposeCode(),
-					due));
-			linkEnds.computeIfAbsent(source.getConsentId(), id -> guardianEnd(source))
+			reconsentDue(row, source, lookups.newerNotice)
+					.ifPresent(due -> reconsent.put(row.getPurposeCode(), due));
+			lookups.linkEnds.computeIfAbsent(source.getConsentId(), id -> guardianEnd(source))
 					.ifPresent(end -> guardianEnded.put(row.getPurposeCode(), end));
 		}
 		action(PendingReason.LEGACY, legacy).ifPresent(actions::add);
@@ -133,21 +176,31 @@ public class PendingActionServiceImpl implements PendingActionService {
 	}
 
 	/** CONSENT_MISSING for the active notice's purposes that have no current decision. */
-	private Optional<PendingAction> missing(NoticeContext context, List<ConsentPurpose> current) {
-		Optional<Notice> notice = noticeRepository
-				.findFirstByContextAndProjectIdIsNullAndStatusAndDeletedFalseOrderByVersionNoDesc(
-						context, NoticeStatus.PUBLISHED);
-		if (notice.isEmpty()) {
+	private Optional<PendingAction> missing(NoticeContext context, List<ConsentPurpose> current, Lookups lookups) {
+		Optional<List<String>> noticeCodes = lookups.noticePurposes.computeIfAbsent(context,
+				this::activeNoticePurposes);
+		if (noticeCodes.isEmpty()) {
 			return Optional.empty();
 		}
 		Set<String> decided = current.stream().map(ConsentPurpose::getPurposeCode).collect(Collectors.toSet());
-		List<String> codes = noticePurposeRepository
-				.findByNoticeVersionIdAndDeletedFalseOrderByDisplayRankAsc(notice.get()
-				.getNoticeVersionId()).stream()
-				.map(NoticePurpose::getPurposeCode).filter(code -> !decided.contains(code)).sorted()
+		List<String> codes = noticeCodes.get().stream().filter(code -> !decided.contains(code)).sorted()
 				.toList();
 		return codes.isEmpty() ? Optional.empty()
 				: Optional.of(new PendingAction(PendingReason.CONSENT_MISSING, codes, null));
+	}
+
+	/** The purposes of the active central notice of a context, or empty when there is none. */
+	private Optional<List<String>> activeNoticePurposes(NoticeContext context) {
+		Optional<Notice> notice = noticeRepository
+				.findFirstByContextAndProjectIdIsNullAndStatusAndDeletedFalseOrderByVersionNoDesc(
+						context, NoticeStatus.PUBLISHED);
+		return notice.map(n -> codesOf(n.getNoticeVersionId()));
+	}
+
+	private List<String> codesOf(Long noticeVersionId) {
+		return noticePurposeRepository
+				.findByNoticeVersionIdAndDeletedFalseOrderByDisplayRankAsc(noticeVersionId).stream()
+				.map(NoticePurpose::getPurposeCode).toList();
 	}
 
 	/** The date re-consent became due for a granted or denied decision, if it is due. */

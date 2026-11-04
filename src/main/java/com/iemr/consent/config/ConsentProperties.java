@@ -50,7 +50,8 @@ public record ConsentProperties(@Valid @DefaultValue Request request, @Valid @De
 		@Valid @DefaultValue Evidence evidence, @Valid @DefaultValue Capture capture,
 		@Valid @DefaultValue CommonApi commonApi, @Valid @DefaultValue Notice notice,
 		@Valid @DefaultValue Otp otp, @Valid @DefaultValue Encryption encryption,
-		@Valid @DefaultValue AccessGrant accessGrant, @Valid @DefaultValue Sms sms) {
+		@Valid @DefaultValue AccessGrant accessGrant, @Valid @DefaultValue Sms sms,
+		@Valid @DefaultValue Admin admin, @Valid @DefaultValue Translation translation) {
 
 	/** @param maxBodyBytes largest accepted request body, in bytes */
 	public record Request(@DefaultValue("1048576") @Positive long maxBodyBytes) {
@@ -150,5 +151,30 @@ public record ConsentProperties(@Valid @DefaultValue Request request, @Valid @De
 	public record Sms(
 			@DefaultValue(DEFAULT_SMS_TEMPLATE) @NotBlank String template,
 			@DefaultValue("2000") @Positive int timeoutMs) {
+	}
+
+	/**
+	 * Admin notice endpoints (feature 006, research R3).
+	 *
+	 * @param serviceKey shared secret Common-API sends as {@code X-Consent-Service-Key}; blank disables
+	 *                   {@code /consent/v1/admin/**}. Set from the environment only; never logged.
+	 */
+	public record Admin(@DefaultValue("") String serviceKey) {
+
+		@Override
+		public String toString() {
+			boolean unset = serviceKey == null || serviceKey.isBlank();
+			return "Admin[serviceKey=" + (unset ? "<unset>" : "******") + "]";
+		}
+	}
+
+	/**
+	 * Machine translation of published notices (feature 006, research R9).
+	 *
+	 * @param provider  translation service; blank (the default) = not configured, so only English is published.
+	 *                  The service is an open decision (TODO-LEGAL / tech lead)
+	 * @param timeoutMs longest wait for one language; a timeout publishes nothing
+	 */
+	public record Translation(@DefaultValue("") String provider, @DefaultValue("10000") @Positive int timeoutMs) {
 	}
 }

@@ -109,13 +109,8 @@ public class NoticeServiceImpl implements NoticeService {
 		return new ActiveNotice(notice.getNoticeVersionId(), t.getLanguageCode(), notice.getContext().name(),
 				t.getBody(), t.getTextHash(), audioUrl(t.getAudioRef()), t.getDataItems(),
 				t.getRetention(), t.getRecipients(), t.getWithdrawalInfo(), t.getGrievanceInfo(),
-				purposes, t.getDeclaration(), t.getRepresentativeDeclaration(), grievance(notice));
-	}
-
-	private static GrievanceContact grievance(Notice n) {
-		GrievanceContact contact = new GrievanceContact(n.getGrievanceOfficerName(), n.getGrievancePhone(),
-				n.getGrievanceEmail(), n.getGrievanceAddress(), n.getGrievanceOfficeHours());
-		return contact.equals(new GrievanceContact(null, null, null, null, null)) ? null : contact;
+				purposes, t.getDeclaration(), t.getRepresentativeDeclaration(),
+				GrievanceContact.from(notice));
 	}
 
 	private void addLanguages(Map<String, NoticeLanguage> byCode, Notice notice) {

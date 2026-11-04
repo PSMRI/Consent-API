@@ -22,7 +22,9 @@
 
 package com.iemr.consent.service.principal;
 
+import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 
 import com.iemr.consent.data.notice.NoticeContext;
 import com.iemr.consent.model.principal.PendingAction;
@@ -36,4 +38,12 @@ public interface PendingActionService {
 	 *         nothing is needed (H3)
 	 */
 	List<PendingAction> pending(Long benRegId, NoticeContext context);
+
+	/**
+	 * API 15 (feature 007): API 9's answer for each patient, computed with the same rules.
+	 *
+	 * @param benRegIds distinct patient ids, 1 to 100 (checked by the caller)
+	 * @return one entry per id, in the given order; an empty list when nothing is needed
+	 */
+	Map<Long, List<PendingAction>> pendingFor(Collection<Long> benRegIds, NoticeContext context);
 }

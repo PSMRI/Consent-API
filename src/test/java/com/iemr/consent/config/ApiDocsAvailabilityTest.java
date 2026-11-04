@@ -52,11 +52,14 @@ import com.iemr.consent.repository.consent.GuardianLinkRepository;
 import com.iemr.consent.repository.evidence.ConsentEvidenceRepository;
 import com.iemr.consent.repository.grant.AccessGrantRepository;
 import com.iemr.consent.repository.notice.NoticePurposeRepository;
+import com.iemr.consent.repository.notice.NoticeRequestRepository;
 import com.iemr.consent.repository.notice.NoticeRepository;
 import com.iemr.consent.repository.notice.NoticeTranslationRepository;
 import com.iemr.consent.repository.notice.PurposeRepository;
 import com.iemr.consent.support.TestFixtures;
 import com.iemr.consent.support.TestTokens;
+
+import jakarta.persistence.EntityManager;
 
 /**
  * User Story 4 on the full application context (database and Redis mocked): docs list exactly
@@ -118,6 +121,12 @@ class ApiDocsAvailabilityTest {
 	@MockBean
 	PlatformTransactionManager transactionManager;
 
+	@MockBean
+	NoticeRequestRepository noticeRequestRepository;
+
+	@MockBean
+	EntityManager entityManager;
+
 	@Nested
 	@TestPropertySource(properties = { "springdoc.api-docs.enabled=true", "springdoc.swagger-ui.enabled=true" })
 	@DisplayName("US4-1: docs enabled")
@@ -139,8 +148,12 @@ class ApiDocsAvailabilityTest {
 					"/consent/v1/otp/challenges/{challengeId}/verify", "/consent/v1/evidence", "/consent/v1/consents",
 					"/consent/v1/principals/{benRegId}/consents", "/consent/v1/principals/{benRegId}/pending-actions",
 					"/consent/v1/principals/{benRegId}/preferences", "/consent/v1/principals/{benRegId}/withdrawals",
+					"/consent/v1/principals/pending-actions/batch",
 					"/consent/v1/principals/{benRegId}/access-grants", "/consent/v1/access-grants",
-					"/consent/v1/access-grants/{grantId}/approve", "/consent/v1/access-grants/{grantId}/revoke");
+					"/consent/v1/access-grants/{grantId}/approve", "/consent/v1/access-grants/{grantId}/revoke",
+					"/consent/v1/admin/projects/{projectId}/notices",
+					"/consent/v1/admin/projects/{projectId}/notices/{context}/draft",
+					"/consent/v1/admin/projects/{projectId}/notices/{context}/publish");
 			assertThat(json).doesNotContain("_test").doesNotContain("/error");
 			assertThat(docs.at("/components/schemas/ErrorCode/enum").size()).isEqualTo(26);
 			assertThat(docs.at("/components/securitySchemes").size()).isEqualTo(3);

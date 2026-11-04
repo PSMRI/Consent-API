@@ -44,6 +44,8 @@ import com.iemr.consent.data.notice.Notice;
 import com.iemr.consent.data.notify.ConsentNotification;
 import com.iemr.consent.data.notice.NoticePurpose;
 import com.iemr.consent.data.notice.NoticePurposeId;
+import com.iemr.consent.data.notice.NoticeRequest;
+import com.iemr.consent.data.notice.NoticeRequestAction;
 import com.iemr.consent.data.notice.NoticeTranslation;
 import com.iemr.consent.data.notice.Purpose;
 
@@ -68,7 +70,7 @@ class EntityMappingTest {
 			NoticeTranslation.class, List.of("cm_notice_translation", "translation_id", "notice_version_id",
 					"language_code", "language_name", "body", "data_items", "retention", "recipients",
 					"withdrawal_info", "grievance_info", "text_hash", "audio_ref", "helpline_script", "declaration",
-					"representative_declaration"),
+					"representative_declaration", "machine_translated", "source_version"),
 			NoticePurpose.class, List.of("cm_notice_purpose", "notice_version_id", "purpose_code", "display_rank"),
 			Consent.class, List.of("cm_consent", "consent_id", "beneficiary_reg_id", "event_type",
 					"consenting_party", "notice_version_id", "language_code", "text_hash", "channel", "mode",
@@ -115,6 +117,16 @@ class EntityMappingTest {
 		want.addAll(AUDIT);
 		assertThat(ConsentNotification.class.getAnnotation(Table.class).name()).isEqualTo("cm_consent_notification");
 		assertThat(columns(ConsentNotification.class)).isEqualTo(want);
+	}
+
+	@Test
+	void noticeRequestMapsTheV36Columns() {
+		Set<String> want = new TreeSet<>(List.of("request_id", "actor_user_id", "request_key", "request_hash",
+				"action", "notice_version_id"));
+		want.addAll(AUDIT);
+		assertThat(NoticeRequest.class.getAnnotation(Table.class).name()).isEqualTo("cm_notice_request");
+		assertThat(columns(NoticeRequest.class)).isEqualTo(want);
+		assertThat(NoticeRequestAction.values()).containsExactly(NoticeRequestAction.DRAFT, NoticeRequestAction.PUBLISH);
 	}
 
 	@Test

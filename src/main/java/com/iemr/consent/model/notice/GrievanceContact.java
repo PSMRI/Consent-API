@@ -22,6 +22,8 @@
 
 package com.iemr.consent.model.notice;
 
+import com.iemr.consent.data.notice.Notice;
+
 /**
  * The grievance officer's official contact shown with a notice and after consent (feature 004). Published business
  * contact, not patient data.
@@ -33,4 +35,11 @@ package com.iemr.consent.model.notice;
  * @param officeHours when the office can be reached
  */
 public record GrievanceContact(String officerName, String phone, String email, String address, String officeHours) {
+
+	/** The notice's contact, or {@code null} when none of its grievance fields is set. */
+	public static GrievanceContact from(Notice n) {
+		GrievanceContact contact = new GrievanceContact(n.getGrievanceOfficerName(), n.getGrievancePhone(),
+				n.getGrievanceEmail(), n.getGrievanceAddress(), n.getGrievanceOfficeHours());
+		return contact.equals(new GrievanceContact(null, null, null, null, null)) ? null : contact;
+	}
 }

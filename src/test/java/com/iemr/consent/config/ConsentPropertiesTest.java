@@ -76,7 +76,25 @@ class ConsentPropertiesTest {
 			assertThat(properties.encryption().key()).isEqualTo("a2V5");
 			assertThat(properties.accessGrant().maxDays()).isEqualTo(30);
 			assertThat(properties.accessGrant().replayHours()).isEqualTo(24);
+			assertThat(properties.admin().serviceKey()).isEmpty();
+			assertThat(properties.translation().provider()).isEmpty();
+			assertThat(properties.translation().timeoutMs()).isEqualTo(10000);
 		});
+	}
+
+	@Test
+	void adminServiceKeyIsBoundButNeverPrinted() {
+		runner.withPropertyValues("consent.admin.service-key=s3cret-value").run(context -> {
+			ConsentProperties properties = context.getBean(ConsentProperties.class);
+			assertThat(properties.admin().serviceKey()).isEqualTo("s3cret-value");
+			assertThat(properties.admin().toString()).doesNotContain("s3cret-value").contains("******");
+			assertThat(properties.toString()).doesNotContain("s3cret-value");
+		});
+		runner.run(context -> assertThat(context.getBean(ConsentProperties.class).admin().toString())
+				.contains("<unset>"));
+		runner.withPropertyValues("consent.admin.service-key=  ").run(context -> assertThat(
+				context.getBean(ConsentProperties.class).admin().toString()).contains("<unset>"));
+		assertThat(new ConsentProperties.Admin(null).toString()).contains("<unset>");
 	}
 
 	@ParameterizedTest
@@ -106,7 +124,8 @@ class ConsentPropertiesTest {
 		"consent.access-grant.max-days=0", "consent.access-grant.replay-hours=0",
 		"consent.evidence.max-audio-bytes=0", "consent.evidence.max-photo-bytes=0",
 		"consent.evidence.self-read-max-seconds=0", "consent.evidence.unlinked-retention-hours=0",
-		"consent.evidence.cleanup-cron=", "consent.sms.template=", "consent.sms.timeout-ms=0" })
+		"consent.evidence.cleanup-cron=", "consent.sms.template=", "consent.sms.timeout-ms=0",
+		"consent.translation.timeout-ms=0" })
 	void rejectsOutOfRangeValues(String setting) {
 		runner.withPropertyValues(setting).run(context -> assertThat(context).hasFailed().getFailure()
 				.hasRootCauseInstanceOf(BindValidationException.class));

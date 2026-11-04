@@ -29,10 +29,12 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.Ordered;
 import org.springframework.web.method.support.HandlerMethodArgumentResolver;
+import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
 import com.iemr.consent.utils.auth.AuthenticationFilter;
 import com.iemr.consent.utils.auth.CurrentUserArgumentResolver;
+import com.iemr.consent.utils.auth.ServiceKeyInterceptor;
 import com.iemr.consent.utils.cors.OriginFilter;
 import com.iemr.consent.utils.http.RequestLoggingFilter;
 import com.iemr.consent.utils.http.RequestSizeLimitFilter;
@@ -64,8 +66,18 @@ public class WebConfig implements WebMvcConfigurer {
 
 	private final CurrentUserArgumentResolver currentUserArgumentResolver;
 
-	public WebConfig(CurrentUserArgumentResolver currentUserArgumentResolver) {
+	private final ServiceKeyInterceptor serviceKeyInterceptor;
+
+	public WebConfig(CurrentUserArgumentResolver currentUserArgumentResolver,
+			ServiceKeyInterceptor serviceKeyInterceptor) {
 		this.currentUserArgumentResolver = currentUserArgumentResolver;
+		this.serviceKeyInterceptor = serviceKeyInterceptor;
+	}
+
+	/** Admin endpoints also need Common-API's service key (feature 006). */
+	@Override
+	public void addInterceptors(InterceptorRegistry registry) {
+		registry.addInterceptor(serviceKeyInterceptor).addPathPatterns("/consent/v1/admin/**");
 	}
 
 	@Bean

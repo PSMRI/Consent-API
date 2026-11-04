@@ -26,6 +26,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.util.List;
@@ -217,6 +219,24 @@ class NoticeServiceImplTest {
 		assertThat(notice.representativeDeclaration()).isEqualTo("We agree for the patient (project)");
 		assertThat(notice.grievance()).isEqualTo(new GrievanceContact("Officer", "1800", "g@example.org", "Office",
 				"10-5"));
+	}
+
+	@Test
+	@DisplayName("Feature 006, FR-005: a project draft is never served; only published notices are read")
+	void projectDraftIsNeverServed() {
+		Notice draft = ConsentFixtures.notice(NoticeStatus.DRAFT);
+		draft.setNoticeVersionId(PROJECT_NOTICE_ID);
+		draft.setProjectId(3);
+		when(notices.findById(PROJECT_NOTICE_ID)).thenReturn(Optional.of(draft));
+		when(translations.findByNoticeVersionIdAndLanguageCodeAndDeletedFalse(PROJECT_NOTICE_ID, "hi"))
+				.thenReturn(Optional.of(projectTranslation("hi", null)));
+		when(translations.findByNoticeVersionIdAndLanguageCodeAndDeletedFalse(ID, "hi"))
+				.thenReturn(Optional.of(ConsentFixtures.translation("hi", null)));
+
+		assertThat(service.findPublished(PROJECT_NOTICE_ID, "hi")).isEmpty();
+		assertThat(service.activeNotice(NoticeContext.REGISTRATION, "hi", 3).noticeVersionId()).isEqualTo(ID);
+		verify(notices, never()).findFirstByContextAndProjectIdAndStatusAndDeletedFalseOrderByVersionNoDesc(
+				NoticeContext.REGISTRATION, 3, NoticeStatus.DRAFT);
 	}
 
 	@Test

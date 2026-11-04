@@ -19,6 +19,12 @@ Delivered so far:
   - signed-form photo only;
   - SMS with the Consent ID (`notify`);
   - unused evidence removed after 24 h.
+- `006-consent-message-authoring`: the Admin "Consent message" tab (A6–A8, called through Common-API). It lists a
+  project's notices, saves the English draft and publishes it (with machine translation once a service is
+  configured, and an optional re-consent). The admin endpoints also need `X-Consent-Service-Key`
+  (`consent.admin.service-key`, shared with Common-API).
+- `007-batch-pending-actions`: API 15, the pending actions of a whole MMU search page in one request, with API 9's
+  rules.
 
 | Method | Path | Purpose |
 |---|---|---|
@@ -36,6 +42,10 @@ Delivered so far:
 | POST | `/consent/v1/access-grants` | A doctor requests time-limited access |
 | POST | `/consent/v1/access-grants/{grantId}/approve` | Patient or guardian approves by OTP |
 | POST | `/consent/v1/access-grants/{grantId}/revoke` | Cancel a pending or active grant |
+| POST | `/consent/v1/principals/pending-actions/batch` | Pending actions of up to 100 patients (API 15, MMU search page) |
+| GET | `/consent/v1/admin/projects/{projectId}/notices` | A project's consent messages (A6, via Common-API; needs `X-Consent-Service-Key`) |
+| PUT | `/consent/v1/admin/projects/{projectId}/notices/{context}/draft` | Save the English draft (A7) |
+| POST | `/consent/v1/admin/projects/{projectId}/notices/{context}/publish` | Publish, translate, retire the previous version (A8) |
 
 Every write (`POST` above, except verify) needs an **`Idempotency-Key`** header (a UUID): a
 retry with the same key returns the original answer and never saves, sends or stores twice.

@@ -33,10 +33,12 @@ import static org.mockito.Mockito.when;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
 import com.iemr.consent.data.consent.Consent;
@@ -211,6 +213,20 @@ class PendingActionServiceImplTest {
 	}
 
 	@Test
+	@DisplayName("Feature 006, R8: a material version retired by a later publish still asks for re-consent")
+	void retiredMaterialVersionStillCounts() {
+		Notice retired = ConsentFixtures.notice(NoticeStatus.RETIRED);
+		retired.setMaterial(true);
+		retired.setPublishedAt(TestFixtures.NOW.minusSeconds(60));
+		when(notices.findNewerMaterial("MMU-REGISTRATION", 1)).thenReturn(List.of(retired));
+		event("c-1", EventType.NEW, ConsentingParty.SELF);
+		current(PrincipalFixtures.row("c-1", "P-REG", PurposeStatus.GRANTED, 1, null));
+
+		assertThat(pending()).contains(new PendingAction(PendingReason.RECONSENT_REQUIRED, List.of("P-REG"),
+				retired.getPublishedAt()));
+	}
+
+	@Test
 	@DisplayName("C16: an expired purpose is due from its end date")
 	void expiredIsDueFromItsEndDate() {
 		event("c-1", EventType.NEW, ConsentingParty.SELF);
@@ -255,5 +271,108 @@ class PendingActionServiceImplTest {
 		assertThat(pending()).extracting(PendingAction::reason).containsExactly(PendingReason.CONSENT_MISSING,
 				PendingReason.LEGACY, PendingReason.RECONSENT_REQUIRED, PendingReason.GUARDIAN_TO_SELF);
 		assertThat(pending().get(1).dueSince()).isEqualTo(legacy.getCapturedAt());
+	}
+
+	@Nested
+	@DisplayName("API 15 (feature 007): the batch gives API 9's answer for every patient")
+	class Batch {
+
+		private static final long NONE = 1L;
+
+		private static final long OLD = 2L;
+
+		private static final long DONE = 3L;
+
+		private ConsentPurpose row(long ben, String consentId, String code, PurposeStatus status) {
+			ConsentPurpose row = PrincipalFixtures.row(consentId, code, status, 1, null);
+			row.setBeneficiaryRegId(ben);
+			return row;
+		}
+
+		private List<ConsentPurpose> threePatients() {
+			event("c-old", EventType.LEGACY, ConsentingParty.SELF);
+			event("c-done", EventType.NEW, ConsentingParty.SELF);
+			List<ConsentPurpose> rows = List.of(row(OLD, "c-old", "P-REG", PurposeStatus.GRANTED),
+					row(DONE, "c-done", "P-REG", PurposeStatus.GRANTED),
+					row(DONE, "c-done", "P-REM", PurposeStatus.DENIED));
+			when(decisions.findByBeneficiaryRegIdInAndCurrentTrue(List.of(NONE, OLD, DONE))).thenReturn(rows);
+			return rows;
+		}
+
+		@Test
+		@DisplayName("each patient's list equals API 9's, keys in request order")
+		void sameAnswerAsApi9() {
+			List<ConsentPurpose> rows = threePatients();
+
+			Map<Long, List<PendingAction>> batch = service.pendingFor(List.of(NONE, OLD, DONE),
+					NoticeContext.REGISTRATION);
+
+			assertThat(batch).containsOnlyKeys(NONE, OLD, DONE);
+			assertThat(batch.keySet()).containsExactly(NONE, OLD, DONE);
+			assertThat(batch.get(NONE)).containsExactly(
+					new PendingAction(PendingReason.CONSENT_MISSING, List.of("P-REG", "P-REM"), null));
+			assertThat(batch.get(OLD)).extracting(PendingAction::reason)
+					.containsExactly(PendingReason.CONSENT_MISSING, PendingReason.LEGACY);
+			assertThat(batch.get(DONE)).isEmpty();
+
+			for (long ben : List.of(NONE, OLD, DONE)) {
+				when(decisions.findByBeneficiaryRegIdAndCurrentTrue(ben))
+						.thenReturn(rows.stream().filter(r -> r.getBeneficiaryRegId() == ben).toList());
+				assertThat(service.pending(ben, NoticeContext.REGISTRATION)).as("patient " + ben)
+						.isEqualTo(batch.get(ben));
+			}
+		}
+
+		@Test
+		@DisplayName("the page needs two decision/consent queries, and the notice is read once")
+		void sharedLookups() {
+			threePatients();
+			Notice newer = ConsentFixtures.notice(NoticeStatus.RETIRED);
+			newer.setPublishedAt(TestFixtures.NOW.minusSeconds(5));
+			when(notices.findNewerMaterial("MMU-REGISTRATION", 1)).thenReturn(List.of(newer));
+
+			Map<Long, List<PendingAction>> batch = service.pendingFor(List.of(NONE, OLD, DONE),
+					NoticeContext.REGISTRATION);
+
+			assertThat(batch.get(DONE)).extracting(PendingAction::reason)
+					.containsExactly(PendingReason.RECONSENT_REQUIRED);
+			verify(decisions, times(1)).findByBeneficiaryRegIdInAndCurrentTrue(any());
+			verify(decisions, never()).findByBeneficiaryRegIdAndCurrentTrue(any());
+			verify(consents, times(1)).findByConsentIdIn(any());
+			verify(notices, times(1)).findFirstByContextAndProjectIdIsNullAndStatusAndDeletedFalseOrderByVersionNoDesc(
+					NoticeContext.REGISTRATION, NoticeStatus.PUBLISHED);
+			verify(noticePurposes, times(1)).findByNoticeVersionIdAndDeletedFalseOrderByDisplayRankAsc(
+					ConsentFixtures.NOTICE_ID);
+			verify(notices, times(1)).findNewerMaterial("MMU-REGISTRATION", 1);
+		}
+
+		@Test
+		@DisplayName("revisit uses the revisit notice; no notice means no CONSENT_MISSING")
+		void revisitContext() {
+			when(decisions.findByBeneficiaryRegIdInAndCurrentTrue(List.of(NONE))).thenReturn(List.of());
+
+			assertThat(service.pendingFor(List.of(NONE), NoticeContext.REVISIT)).containsEntry(NONE, List.of());
+			verify(consents, never()).findByConsentIdIn(any());
+		}
+
+		@Test
+		@DisplayName("an unknown patient is a patient with no consent")
+		void unknownPatient() {
+			when(decisions.findByBeneficiaryRegIdInAndCurrentTrue(List.of(999L))).thenReturn(List.of());
+
+			assertThat(service.pendingFor(List.of(999L), NoticeContext.REGISTRATION).get(999L)).containsExactly(
+					new PendingAction(PendingReason.CONSENT_MISSING, List.of("P-REG", "P-REM"), null));
+		}
+
+		@Test
+		@DisplayName("an error for any patient fails the whole batch")
+		void oneFailureFailsTheBatch() {
+			threePatients();
+			when(consents.findByConsentIdIn(any())).thenThrow(new IllegalStateException("db down"));
+
+			org.assertj.core.api.Assertions.assertThatThrownBy(
+					() -> service.pendingFor(List.of(NONE, OLD, DONE), NoticeContext.REGISTRATION))
+					.isInstanceOf(IllegalStateException.class);
+		}
 	}
 }
