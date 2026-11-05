@@ -93,6 +93,7 @@ import com.iemr.consent.repository.notice.NoticeTranslationRepository;
 import com.iemr.consent.repository.notice.PurposeRepository;
 import com.iemr.consent.service.audit.AuditLogServiceImpl;
 import com.iemr.consent.service.consent.ConsentServiceImpl;
+import com.iemr.consent.service.consent.ConsentDecisionWriter;
 import com.iemr.consent.service.consent.ConsentValidator;
 import com.iemr.consent.service.consent.ConsentWriter;
 import com.iemr.consent.repository.notify.ConsentNotificationRepository;
@@ -144,6 +145,7 @@ import com.iemr.consent.utils.idempotency.RequestHasher;
 @Import({ ErrorResponseWriter.class, OriginPolicy.class, PublicPaths.class, JwtValidator.class,
 	SessionValidator.class, SecurityProperties.class, RequestHasher.class, FieldEncryptor.class,
 	NoticeServiceImpl.class, ConsentServiceImpl.class, ConsentValidator.class, ConsentWriter.class,
+	ConsentDecisionWriter.class,
 	GuardianRule.class, OtpProofRule.class, SelfReadProofRule.class, RecordingRule.class, SignaturePhotoProofRule.class,
 	WitnessedProofRule.class, ReadAloudProofRule.class, EvidenceProofWriter.class, OtpProofWriter.class,
 	GuardianProofWriter.class, DeclarationRule.class, DeclarationProofWriter.class, ConsentNotifier.class,

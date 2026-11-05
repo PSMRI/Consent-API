@@ -43,6 +43,7 @@ import org.junit.jupiter.api.Test;
 
 import com.iemr.consent.data.consent.Consent;
 import com.iemr.consent.data.consent.ConsentPurpose;
+import com.iemr.consent.data.consent.ConsentMode;
 import com.iemr.consent.data.consent.ConsentingParty;
 import com.iemr.consent.data.consent.EventType;
 import com.iemr.consent.data.consent.GuardianLink;
@@ -145,7 +146,8 @@ class PendingActionServiceImplTest {
 		event("c-1", EventType.NEW, ConsentingParty.SELF);
 		current(PrincipalFixtures.row("c-1", "P-REG", PurposeStatus.GRANTED, 1, null));
 		assertThat(pending())
-				.containsExactly(new PendingAction(PendingReason.CONSENT_MISSING, List.of("P-REM"), null));
+				.containsExactly(new PendingAction(PendingReason.CONSENT_MISSING, List.of("P-REM"),
+						null));
 	}
 
 	@Test
@@ -155,7 +157,8 @@ class PendingActionServiceImplTest {
 		pending();
 		verify(notices).findFirstByContextAndProjectIdIsNullAndStatusAndDeletedFalseOrderByVersionNoDesc(
 				NoticeContext.REGISTRATION, NoticeStatus.PUBLISHED);
-		verify(notices, never()).findFirstByContextAndProjectIdAndStatusAndDeletedFalseOrderByVersionNoDesc(any(),
+		verify(notices, never())
+				.findFirstByContextAndProjectIdAndStatusAndDeletedFalseOrderByVersionNoDesc(any(),
 				any(), any());
 	}
 
@@ -169,7 +172,8 @@ class PendingActionServiceImplTest {
 				.thenReturn(List.of(link("P-TRT")));
 		current();
 		assertThat(service.pending(BEN, NoticeContext.REVISIT))
-				.containsExactly(new PendingAction(PendingReason.CONSENT_MISSING, List.of("P-TRT"), null));
+				.containsExactly(new PendingAction(PendingReason.CONSENT_MISSING, List.of("P-TRT"),
+						null));
 
 		when(notices.findFirstByContextAndProjectIdIsNullAndStatusAndDeletedFalseOrderByVersionNoDesc(NoticeContext.REGISTRATION,
 				NoticeStatus.PUBLISHED)).thenReturn(Optional.empty());
@@ -183,7 +187,21 @@ class PendingActionServiceImplTest {
 		current(PrincipalFixtures.row("c-0", "P-REM", PurposeStatus.GRANTED, 1, null),
 				PrincipalFixtures.row("c-0", "P-REG", PurposeStatus.GRANTED, 1, null));
 		assertThat(pending()).containsExactly(
-				new PendingAction(PendingReason.LEGACY, List.of("P-REG", "P-REM"), legacy.getCapturedAt()));
+				new PendingAction(PendingReason.LEGACY, List.of("P-REG", "P-REM"),
+						legacy.getCapturedAt()));
+	}
+
+	@Test
+	@DisplayName("Feature 008: an imported PAPER legacy consent is LEGACY pending; ungranted P-REM is missing")
+	void importedPaperLegacyConsentIsPending() {
+		Consent legacy = event("c-legacy", EventType.LEGACY, ConsentingParty.SELF);
+		legacy.setMode(ConsentMode.PAPER);
+		current(PrincipalFixtures.row("c-legacy", "P-REG", PurposeStatus.GRANTED, 1, null));
+		assertThat(pending()).extracting(PendingAction::reason).containsExactly(PendingReason.CONSENT_MISSING,
+				PendingReason.LEGACY);
+		assertThat(pending()).filteredOn(a -> a.reason() == PendingReason.LEGACY).singleElement()
+				.isEqualTo(new PendingAction(PendingReason.LEGACY, List.of("P-REG"),
+						legacy.getCapturedAt()));
 	}
 
 	@Test
@@ -234,7 +252,8 @@ class PendingActionServiceImplTest {
 		current(PrincipalFixtures.row("c-1", "P-REG", PurposeStatus.GRANTED, 1, null),
 				PrincipalFixtures.row("c-1", "P-REM", PurposeStatus.GRANTED, 1, end));
 		assertThat(pending())
-				.containsExactly(new PendingAction(PendingReason.RECONSENT_REQUIRED, List.of("P-REM"), end));
+				.containsExactly(new PendingAction(PendingReason.RECONSENT_REQUIRED, List.of("P-REM"),
+						end));
 	}
 
 	@Test
@@ -249,7 +268,8 @@ class PendingActionServiceImplTest {
 				PrincipalFixtures.row("c-1", "P-REM", PurposeStatus.DENIED, 1, null));
 
 		assertThat(pending()).containsExactly(
-				new PendingAction(PendingReason.GUARDIAN_TO_SELF, List.of("P-REG", "P-REM"), eighteenth));
+				new PendingAction(PendingReason.GUARDIAN_TO_SELF, List.of("P-REG", "P-REM"),
+						eighteenth));
 		verify(links, times(1)).findFirstByConsentIdAndDeletedFalse("c-1");
 
 		ended.setValidUntil(TestFixtures.NOW.plusSeconds(60));
@@ -295,7 +315,8 @@ class PendingActionServiceImplTest {
 			List<ConsentPurpose> rows = List.of(row(OLD, "c-old", "P-REG", PurposeStatus.GRANTED),
 					row(DONE, "c-done", "P-REG", PurposeStatus.GRANTED),
 					row(DONE, "c-done", "P-REM", PurposeStatus.DENIED));
-			when(decisions.findByBeneficiaryRegIdInAndCurrentTrue(List.of(NONE, OLD, DONE))).thenReturn(rows);
+			when(decisions.findByBeneficiaryRegIdInAndCurrentTrue(List.of(NONE, OLD, DONE)))
+					.thenReturn(rows);
 			return rows;
 		}
 
@@ -310,14 +331,16 @@ class PendingActionServiceImplTest {
 			assertThat(batch).containsOnlyKeys(NONE, OLD, DONE);
 			assertThat(batch.keySet()).containsExactly(NONE, OLD, DONE);
 			assertThat(batch.get(NONE)).containsExactly(
-					new PendingAction(PendingReason.CONSENT_MISSING, List.of("P-REG", "P-REM"), null));
+					new PendingAction(PendingReason.CONSENT_MISSING, List.of("P-REG", "P-REM"),
+							null));
 			assertThat(batch.get(OLD)).extracting(PendingAction::reason)
 					.containsExactly(PendingReason.CONSENT_MISSING, PendingReason.LEGACY);
 			assertThat(batch.get(DONE)).isEmpty();
 
 			for (long ben : List.of(NONE, OLD, DONE)) {
 				when(decisions.findByBeneficiaryRegIdAndCurrentTrue(ben))
-						.thenReturn(rows.stream().filter(r -> r.getBeneficiaryRegId() == ben).toList());
+						.thenReturn(rows.stream().filter(r -> r.getBeneficiaryRegId() == ben)
+								.toList());
 				assertThat(service.pending(ben, NoticeContext.REGISTRATION)).as("patient " + ben)
 						.isEqualTo(batch.get(ben));
 			}
@@ -339,7 +362,8 @@ class PendingActionServiceImplTest {
 			verify(decisions, times(1)).findByBeneficiaryRegIdInAndCurrentTrue(any());
 			verify(decisions, never()).findByBeneficiaryRegIdAndCurrentTrue(any());
 			verify(consents, times(1)).findByConsentIdIn(any());
-			verify(notices, times(1)).findFirstByContextAndProjectIdIsNullAndStatusAndDeletedFalseOrderByVersionNoDesc(
+			verify(notices, times(1))
+					.findFirstByContextAndProjectIdIsNullAndStatusAndDeletedFalseOrderByVersionNoDesc(
 					NoticeContext.REGISTRATION, NoticeStatus.PUBLISHED);
 			verify(noticePurposes, times(1)).findByNoticeVersionIdAndDeletedFalseOrderByDisplayRankAsc(
 					ConsentFixtures.NOTICE_ID);
@@ -351,7 +375,8 @@ class PendingActionServiceImplTest {
 		void revisitContext() {
 			when(decisions.findByBeneficiaryRegIdInAndCurrentTrue(List.of(NONE))).thenReturn(List.of());
 
-			assertThat(service.pendingFor(List.of(NONE), NoticeContext.REVISIT)).containsEntry(NONE, List.of());
+			assertThat(service.pendingFor(List.of(NONE), NoticeContext.REVISIT)).containsEntry(NONE,
+					List.of());
 			verify(consents, never()).findByConsentIdIn(any());
 		}
 
@@ -360,8 +385,10 @@ class PendingActionServiceImplTest {
 		void unknownPatient() {
 			when(decisions.findByBeneficiaryRegIdInAndCurrentTrue(List.of(999L))).thenReturn(List.of());
 
-			assertThat(service.pendingFor(List.of(999L), NoticeContext.REGISTRATION).get(999L)).containsExactly(
-					new PendingAction(PendingReason.CONSENT_MISSING, List.of("P-REG", "P-REM"), null));
+			assertThat(service.pendingFor(List.of(999L), NoticeContext.REGISTRATION).get(999L))
+					.containsExactly(
+					new PendingAction(PendingReason.CONSENT_MISSING, List.of("P-REG", "P-REM"),
+							null));
 		}
 
 		@Test

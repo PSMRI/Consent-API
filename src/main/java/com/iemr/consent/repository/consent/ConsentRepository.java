@@ -30,6 +30,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
 import com.iemr.consent.data.consent.Consent;
+import com.iemr.consent.data.consent.EventType;
 
 /** Consent events ({@code cm_consent}); insert-only in code. */
 @Repository
@@ -41,4 +42,11 @@ public interface ConsentRepository extends JpaRepository<Consent, String> {
 	List<Consent> findByBeneficiaryRegIdOrderByServerReceivedAtDesc(Long beneficiaryRegId);
 
 	List<Consent> findByConsentIdIn(Collection<String> consentIds);
+
+	/** Whether the patient has any consent event other than this type: a non-LEGACY one was taken in the app. */
+	boolean existsByBeneficiaryRegIdAndEventTypeNot(Long beneficiaryRegId, EventType eventType);
+
+	/** The patient's newest event of this type by capture time (the newest legacy consent, feature 008). */
+	Optional<Consent> findFirstByBeneficiaryRegIdAndEventTypeOrderByCapturedAtDesc(Long beneficiaryRegId,
+			EventType eventType);
 }

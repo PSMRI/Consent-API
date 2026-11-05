@@ -79,6 +79,7 @@ class ConsentPropertiesTest {
 			assertThat(properties.admin().serviceKey()).isEmpty();
 			assertThat(properties.translation().provider()).isEmpty();
 			assertThat(properties.translation().timeoutMs()).isEqualTo(10000);
+			assertThat(properties.legacy().batchExpiryDays()).isEqualTo(30);
 		});
 	}
 
@@ -125,7 +126,7 @@ class ConsentPropertiesTest {
 		"consent.evidence.max-audio-bytes=0", "consent.evidence.max-photo-bytes=0",
 		"consent.evidence.self-read-max-seconds=0", "consent.evidence.unlinked-retention-hours=0",
 		"consent.evidence.cleanup-cron=", "consent.sms.template=", "consent.sms.timeout-ms=0",
-		"consent.translation.timeout-ms=0" })
+		"consent.translation.timeout-ms=0", "consent.legacy.batch-expiry-days=0" })
 	void rejectsOutOfRangeValues(String setting) {
 		runner.withPropertyValues(setting).run(context -> assertThat(context).hasFailed().getFailure()
 				.hasRootCauseInstanceOf(BindValidationException.class));

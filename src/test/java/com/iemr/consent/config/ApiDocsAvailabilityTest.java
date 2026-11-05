@@ -55,6 +55,8 @@ import com.iemr.consent.repository.notice.NoticePurposeRepository;
 import com.iemr.consent.repository.notice.NoticeRequestRepository;
 import com.iemr.consent.repository.notice.NoticeRepository;
 import com.iemr.consent.repository.notice.NoticeTranslationRepository;
+import com.iemr.consent.repository.legacy.LegacyBatchRepository;
+import com.iemr.consent.repository.legacy.LegacyRowRepository;
 import com.iemr.consent.repository.notice.PurposeRepository;
 import com.iemr.consent.support.TestFixtures;
 import com.iemr.consent.support.TestTokens;
@@ -127,6 +129,12 @@ class ApiDocsAvailabilityTest {
 	@MockBean
 	EntityManager entityManager;
 
+	@MockBean
+	LegacyBatchRepository legacyBatchRepository;
+
+	@MockBean
+	LegacyRowRepository legacyRowRepository;
+
 	@Nested
 	@TestPropertySource(properties = { "springdoc.api-docs.enabled=true", "springdoc.swagger-ui.enabled=true" })
 	@DisplayName("US4-1: docs enabled")
@@ -153,7 +161,8 @@ class ApiDocsAvailabilityTest {
 					"/consent/v1/access-grants/{grantId}/approve", "/consent/v1/access-grants/{grantId}/revoke",
 					"/consent/v1/admin/projects/{projectId}/notices",
 					"/consent/v1/admin/projects/{projectId}/notices/{context}/draft",
-					"/consent/v1/admin/projects/{projectId}/notices/{context}/publish");
+					"/consent/v1/admin/projects/{projectId}/notices/{context}/publish",
+					"/consent/v1/admin/legacy/batches", "/consent/v1/admin/legacy/batches/{batchId}/import");
 			assertThat(json).doesNotContain("_test").doesNotContain("/error");
 			assertThat(docs.at("/components/schemas/ErrorCode/enum").size()).isEqualTo(26);
 			assertThat(docs.at("/components/securitySchemes").size()).isEqualTo(3);

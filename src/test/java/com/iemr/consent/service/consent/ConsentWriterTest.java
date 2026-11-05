@@ -88,7 +88,7 @@ class ConsentWriterTest {
 		when(consents.saveAndFlush(any())).thenAnswer(i -> i.getArgument(0));
 		when(purposes.findCurrent(any(), anyString())).thenReturn(Optional.empty());
 		notifier = mock(ConsentNotifier.class);
-		writer = new ConsentWriter(consents, purposes, List.of(proofWriter), declarationWriter, notifier, audit,
+		writer = new ConsentWriter(consents, new ConsentDecisionWriter(purposes), List.of(proofWriter), declarationWriter, notifier, audit,
 				TestFixtures.CLOCK,
 				TestFixtures.consentProperties());
 	}

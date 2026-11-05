@@ -28,13 +28,18 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.io.IOException;
 import java.math.BigDecimal;
+import java.time.Instant;
+import java.util.List;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -46,12 +51,17 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 import com.iemr.consent.data.evidence.EvidenceType;
 import com.iemr.consent.model.evidence.EvidenceUploadResult;
+import com.iemr.consent.model.evidence.EvidenceView;
+import com.iemr.consent.service.evidence.EvidenceAccessService;
+import com.iemr.consent.service.evidence.EvidenceFile;
 import com.iemr.consent.service.evidence.EvidenceService;
 import com.iemr.consent.service.evidence.EvidenceUpload;
 import com.iemr.consent.support.ConsentFixtures;
 import com.iemr.consent.support.TestFixtures;
 import com.iemr.consent.utils.auth.AuthenticatedUser;
 import com.iemr.consent.utils.auth.CurrentUserArgumentResolver;
+import com.iemr.consent.utils.exception.ConsentApiException;
+import com.iemr.consent.utils.exception.ErrorCode;
 import com.iemr.consent.utils.exception.ErrorResponseWriter;
 import com.iemr.consent.utils.exception.GlobalExceptionHandler;
 import com.iemr.consent.utils.http.TraceIdFilter;
@@ -62,14 +72,19 @@ class EvidenceControllerTest {
 
 	private static final String SHA = "b".repeat(64);
 
+	private static final String ID = "0f8fad5b-d9cb-469f-a165-70867728950e";
+
 	private EvidenceService service;
+
+	private EvidenceAccessService access;
 
 	private MockMvc mvc;
 
 	@BeforeEach
 	void setUp() {
 		service = mock(EvidenceService.class);
-		mvc = MockMvcBuilders.standaloneSetup(new EvidenceController(service, TestFixtures.CLOCK))
+		access = mock(EvidenceAccessService.class);
+		mvc = MockMvcBuilders.standaloneSetup(new EvidenceController(service, access, TestFixtures.CLOCK))
 				.setControllerAdvice(new GlobalExceptionHandler(new ErrorResponseWriter(TestFixtures.objectMapper(),
 						TestFixtures.CLOCK, TestFixtures.consentProperties())))
 				.setCustomArgumentResolvers(new CurrentUserArgumentResolver()).addFilters(new TraceIdFilter()).build();
@@ -117,5 +132,46 @@ class EvidenceControllerTest {
 		mvc.perform(multipart("/consent/v1/evidence").file(broken).param("type", "PATIENT_PHOTO").param("sha256", SHA)
 				.header("Idempotency-Key", KEY).requestAttr(AuthenticatedUser.ATTRIBUTE, ConsentFixtures.WORKER))
 				.andExpect(status().isBadRequest()).andExpect(jsonPath("$.error.code").value("MALFORMED_REQUEST"));
+	}
+
+	@Test
+	void listsTheFilesOfAConsent() throws Exception {
+		when(access.listForConsent(ID)).thenReturn(List.of(new EvidenceView("e1", EvidenceType.VOICE_CLIP,
+				"audio/webm", 3L, BigDecimal.valueOf(35), "worker42", Instant.parse("2026-11-05T08:00:00Z"))));
+		mvc.perform(get("/consent/v1/evidence").param("consentId", ID.toUpperCase())
+				.requestAttr(AuthenticatedUser.ATTRIBUTE, ConsentFixtures.WORKER))
+				.andExpect(status().isOk()).andExpect(jsonPath("$.data[0].evidenceId").value("e1"))
+				.andExpect(jsonPath("$.data[0].type").value("VOICE_CLIP"));
+	}
+
+	@Test
+	void playsInlineOrDownloads() throws Exception {
+		EvidenceFile file = new EvidenceFile("consent-evidence-e1.webm", "audio/webm", "abc".getBytes());
+		when(access.open(eq(ID), eq(false), eq(ConsentFixtures.WORKER), any())).thenReturn(file);
+		when(access.open(eq(ID), eq(true), eq(ConsentFixtures.WORKER), any())).thenReturn(file);
+
+		mvc.perform(get("/consent/v1/evidence/" + ID + "/content")
+				.requestAttr(AuthenticatedUser.ATTRIBUTE, ConsentFixtures.WORKER))
+				.andExpect(status().isOk()).andExpect(content().contentType("audio/webm"))
+				.andExpect(content().bytes("abc".getBytes()))
+				.andExpect(header().string("Content-Disposition", "inline; filename=\"consent-evidence-e1.webm\""))
+				.andExpect(header().string("Cache-Control", "no-store"))
+				.andExpect(header().string("X-Content-Type-Options", "nosniff"));
+		mvc.perform(get("/consent/v1/evidence/" + ID + "/content").param("download", "true")
+				.requestAttr(AuthenticatedUser.ATTRIBUTE, ConsentFixtures.WORKER))
+				.andExpect(status().isOk()).andExpect(header().string("Content-Disposition",
+						"attachment; filename=\"consent-evidence-e1.webm\""));
+	}
+
+	@Test
+	void unknownOrMalformedIdsAreNotFound() throws Exception {
+		when(access.open(eq(ID), eq(false), any(), any())).thenThrow(new ConsentApiException(ErrorCode.NOT_FOUND));
+		mvc.perform(get("/consent/v1/evidence/" + ID + "/content")
+				.requestAttr(AuthenticatedUser.ATTRIBUTE, ConsentFixtures.WORKER))
+				.andExpect(status().isNotFound()).andExpect(jsonPath("$.error.code").value("NOT_FOUND"));
+		mvc.perform(get("/consent/v1/evidence/not-a-uuid/content")
+				.requestAttr(AuthenticatedUser.ATTRIBUTE, ConsentFixtures.WORKER)).andExpect(status().isNotFound());
+		mvc.perform(get("/consent/v1/evidence").param("consentId", "x")
+				.requestAttr(AuthenticatedUser.ATTRIBUTE, ConsentFixtures.WORKER)).andExpect(status().isNotFound());
 	}
 }

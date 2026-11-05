@@ -43,6 +43,9 @@ public interface ConsentEvidenceRepository extends JpaRepository<ConsentEvidence
 
 	Optional<ConsentEvidence> findByUploadedByAndRequestKey(Long uploadedBy, String requestKey);
 
+	/** Evidence linked to a consent and not purged, oldest first (evidence retrieval). */
+	List<ConsentEvidence> findByConsentIdAndDeletedFalseOrderByCreatedAtAsc(String consentId);
+
 	/**
 	 * Links evidence to a consent only if it is still unlinked and not removed by the clean-up job.
 	 *

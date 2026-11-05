@@ -22,7 +22,10 @@
 
 package com.iemr.consent.data.consent;
 
-/** How consent was taken (proposal §3.1 rule 6). */
+/**
+ * How consent was taken (proposal §3.1 rule 6). {@code PAPER} is for legacy records only (feature 008): it has no
+ * {@code ModeProofRule}, so a save (API 7) refuses it, as it does {@code VOICE_CLIP}.
+ */
 public enum ConsentMode {
-	SELF_READ, READ_ALOUD, VOICE_CLIP, WITNESSED, SIGNATURE_PHOTO, OTP
+	SELF_READ, READ_ALOUD, VOICE_CLIP, WITNESSED, SIGNATURE_PHOTO, OTP, PAPER
 }

@@ -80,7 +80,7 @@ public final class TestFixtures {
 				new ConsentProperties.Notice(audioBaseUrl), new ConsentProperties.Otp(300L, 30L, 5),
 				new ConsentProperties.Encryption(ENCRYPTION_KEY), new ConsentProperties.AccessGrant(30, 24),
 				new ConsentProperties.Sms(SMS_TEMPLATE, 2000), new ConsentProperties.Admin(SERVICE_KEY),
-				new ConsentProperties.Translation("", 10000));
+				new ConsentProperties.Translation("", 10000), new ConsentProperties.Legacy(30));
 	}
 
 	public static SecurityProperties securityProperties() {

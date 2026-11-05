@@ -39,6 +39,10 @@ import com.iemr.consent.data.consent.ConsentPurpose;
 import com.iemr.consent.data.consent.GuardianLink;
 import com.iemr.consent.data.evidence.ConsentEvidence;
 import com.iemr.consent.data.grant.AccessGrant;
+import com.iemr.consent.data.legacy.LegacyBatch;
+import com.iemr.consent.data.legacy.LegacyBatchStatus;
+import com.iemr.consent.data.legacy.LegacyRow;
+import com.iemr.consent.data.legacy.LegacyRowStatus;
 import com.iemr.consent.data.evidence.EvidenceType;
 import com.iemr.consent.data.notice.Notice;
 import com.iemr.consent.data.notify.ConsentNotification;
@@ -62,36 +66,55 @@ class EntityMappingTest {
 			"Deleted");
 
 	private static final Map<Class<?>, List<String>> EXPECTED = Map.of(
-			Purpose.class, List.of("cm_purpose", "purpose_id", "purpose_code", "version", "name", "description",
+			Purpose.class, List.of("cm_purpose", "purpose_id", "purpose_code", "version", "name",
+					"description",
 					"legal_basis", "is_mandatory", "is_withdrawable", "validity_days", "is_active"),
 			Notice.class, List.of("cm_notice", "notice_version_id", "notice_code", "version_no", "context",
-					"is_material", "status", "approved_by", "published_at", "project_id", "grievance_officer_name",
-					"grievance_phone", "grievance_email", "grievance_address", "grievance_office_hours"),
+					"is_material", "status", "approved_by", "published_at", "project_id",
+							"grievance_officer_name",
+					"grievance_phone", "grievance_email", "grievance_address",
+							"grievance_office_hours"),
 			NoticeTranslation.class, List.of("cm_notice_translation", "translation_id", "notice_version_id",
-					"language_code", "language_name", "body", "data_items", "retention", "recipients",
-					"withdrawal_info", "grievance_info", "text_hash", "audio_ref", "helpline_script", "declaration",
+					"language_code", "language_name", "body", "data_items", "retention",
+							"recipients",
+					"withdrawal_info", "grievance_info", "text_hash", "audio_ref",
+							"helpline_script", "declaration",
 					"representative_declaration", "machine_translated", "source_version"),
-			NoticePurpose.class, List.of("cm_notice_purpose", "notice_version_id", "purpose_code", "display_rank"),
+			NoticePurpose.class, List.of("cm_notice_purpose", "notice_version_id", "purpose_code",
+					"display_rank"),
 			Consent.class, List.of("cm_consent", "consent_id", "beneficiary_reg_id", "event_type",
-					"consenting_party", "notice_version_id", "language_code", "text_hash", "channel", "mode",
-					"captured_by", "provider_service_map_id", "facility_id", "service_point_id", "service_line",
-					"device_id", "call_id", "captured_at", "server_received_at", "capture_time_flagged",
+					"consenting_party", "notice_version_id", "language_code", "text_hash",
+							"channel", "mode",
+					"captured_by", "provider_service_map_id", "facility_id", "service_point_id",
+							"service_line",
+					"device_id", "call_id", "captured_at", "server_received_at",
+							"capture_time_flagged",
 					"sync_status", "project_id", "config_version", "request_key", "request_hash"),
 			ConsentPurpose.class, List.of("cm_consent_purpose", "consent_purpose_id", "consent_id",
-					"beneficiary_reg_id", "purpose_code", "decision", "status", "version_no", "is_current",
+					"beneficiary_reg_id", "purpose_code", "decision", "status", "version_no",
+							"is_current",
 					"valid_until", "current_key"),
-			ConsentEvidence.class, List.of("cm_consent_evidence", "evidence_id", "consent_id", "type", "file_ref",
-					"sha256", "content_type", "size_bytes", "duration_sec", "witness_name", "witness_relationship",
-					"otp_status", "masked_phone", "call_id", "uploaded_by", "request_key", "request_hash",
-					"created_at", "declaration_text", "declaration_wording", "declaration_app_default"),
-			GuardianLink.class, List.of("cm_guardian_link", "guardian_link_id", "consent_id", "beneficiary_reg_id",
-					"guardian_type", "guardian_name", "guardian_phone", "relationship", "verification_method",
+			ConsentEvidence.class, List.of("cm_consent_evidence", "evidence_id", "consent_id", "type",
+					"file_ref",
+					"sha256", "content_type", "size_bytes", "duration_sec", "witness_name",
+							"witness_relationship",
+					"otp_status", "masked_phone", "call_id", "uploaded_by", "request_key",
+							"request_hash",
+					"created_at", "declaration_text", "declaration_wording",
+							"declaration_app_default"),
+			GuardianLink.class, List.of("cm_guardian_link", "guardian_link_id", "consent_id",
+					"beneficiary_reg_id",
+					"guardian_type", "guardian_name", "guardian_phone", "relationship",
+							"verification_method",
 					"verified_at", "follow_up_required", "valid_until"),
 			AuditLogEntry.class, List.of("cm_audit_log", "id", "action", "consent_id", "beneficiary_reg_id",
-					"purpose", "status", "initiator", "source_ip", "created_at", "prev_hash", "entry_hash"),
+					"purpose", "status", "initiator", "source_ip", "created_at", "prev_hash",
+							"entry_hash"),
 			AccessGrant.class, List.of("cm_access_grant", "grant_id", "beneficiary_reg_id", "grant_type",
-					"grantee_user_id", "grantee_name", "grantee_facility_id", "purposes", "reason", "days", "status",
-					"valid_until", "approved_at", "approved_by", "approval_masked_phone", "revoked_at", "reviewed_by",
+					"grantee_user_id", "grantee_name", "grantee_facility_id", "purposes", "reason",
+							"days", "status",
+					"valid_until", "approved_at", "approved_by", "approval_masked_phone",
+							"revoked_at", "reviewed_by",
 					"revoke_reason", "requested_by", "request_key", "request_hash"));
 
 	private static final Set<Class<?>> APPEND_ONLY = Set.of(Consent.class, ConsentPurpose.class,
@@ -115,7 +138,8 @@ class EntityMappingTest {
 		Set<String> want = new TreeSet<>(List.of("notification_id", "consent_id", "channel", "phone", "status",
 				"attempted_at"));
 		want.addAll(AUDIT);
-		assertThat(ConsentNotification.class.getAnnotation(Table.class).name()).isEqualTo("cm_consent_notification");
+		assertThat(ConsentNotification.class.getAnnotation(Table.class).name())
+				.isEqualTo("cm_consent_notification");
 		assertThat(columns(ConsentNotification.class)).isEqualTo(want);
 	}
 
@@ -126,7 +150,45 @@ class EntityMappingTest {
 		want.addAll(AUDIT);
 		assertThat(NoticeRequest.class.getAnnotation(Table.class).name()).isEqualTo("cm_notice_request");
 		assertThat(columns(NoticeRequest.class)).isEqualTo(want);
-		assertThat(NoticeRequestAction.values()).containsExactly(NoticeRequestAction.DRAFT, NoticeRequestAction.PUBLISH);
+		assertThat(NoticeRequestAction.values()).containsExactly(NoticeRequestAction.DRAFT,
+				NoticeRequestAction.PUBLISH);
+	}
+
+	@Test
+	void legacyTablesMapTheV37Columns() {
+		Set<String> batch = new TreeSet<>(List.of("batch_id", "file_name", "service_provider_id", "status",
+				"total",
+				"valid", "imported", "skipped", "failed", "uploaded_by_user_id", "uploaded_by",
+						"uploaded_at",
+				"imported_by", "imported_at", "expires_at", "request_key", "request_hash",
+						"import_request_key",
+				"import_request_hash"));
+		batch.addAll(AUDIT);
+		assertThat(LegacyBatch.class.getAnnotation(Table.class).name()).isEqualTo("cm_legacy_batch");
+		assertThat(columns(LegacyBatch.class)).isEqualTo(batch);
+		Set<String> row = new TreeSet<>(List.of("row_id", "batch_id", "row_no", "beneficiary_id",
+				"beneficiary_reg_id", "consent_date", "purposes", "language_code", "mode",
+						"representative_name",
+				"representative_relationship", "remarks", "status", "reasons", "consent_id"));
+		row.addAll(AUDIT);
+		assertThat(LegacyRow.class.getAnnotation(Table.class).name()).isEqualTo("cm_legacy_row");
+		assertThat(columns(LegacyRow.class)).isEqualTo(row);
+		assertThat(LegacyBatchStatus.values()).containsExactly(LegacyBatchStatus.CHECKED,
+				LegacyBatchStatus.IMPORTED);
+		assertThat(LegacyRowStatus.values()).containsExactly(LegacyRowStatus.VALID, LegacyRowStatus.ERROR,
+				LegacyRowStatus.IMPORTED, LegacyRowStatus.SKIPPED);
+	}
+
+	@Test
+	void legacyRowNeverPrintsTheRepresentativeOrRemarks() {
+		LegacyRow row = new LegacyRow();
+		row.setRowId(5L);
+		row.setRowNo(2);
+		row.setStatus(LegacyRowStatus.VALID);
+		row.setRepresentativeNameEncrypted("enc-name");
+		row.setRemarksEncrypted("enc-remarks");
+		row.setBeneficiaryId("100245678901");
+		assertThat(row).hasToString("LegacyRow[rowId=5, rowNo=2, status=VALID]");
 	}
 
 	@Test

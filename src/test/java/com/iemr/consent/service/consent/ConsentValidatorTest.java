@@ -227,6 +227,14 @@ class ConsentValidatorTest {
 				.isEqualTo(List.of(new FieldErrorDetail("mode", "is not supported")));
 	}
 
+	@Test
+	@DisplayName("Feature 008: mode PAPER is for legacy records only; a save refuses it like VOICE_CLIP")
+	void paperModeIsRefused() {
+		assertThatThrownBy(() -> validator.validate(ConsentFixtures.request().mode(ConsentMode.PAPER).build(),
+				ConsentFixtures.WORKER)).isInstanceOf(ConsentApiException.class).extracting("details")
+				.isEqualTo(List.of(new FieldErrorDetail("mode", "is not supported")));
+	}
+
 	@ParameterizedTest
 	@EnumSource(value = ConsentMode.class, names = { "SELF_READ", "WITNESSED" })
 	@DisplayName("US3 (004): more than one recording is refused in every mode, even on a decline")

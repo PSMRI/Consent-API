@@ -37,7 +37,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.iemr.consent.config.ConsentProperties;
 import com.iemr.consent.data.consent.Consent;
-import com.iemr.consent.data.consent.ConsentPurpose;
 import com.iemr.consent.data.consent.PurposeStatus;
 import com.iemr.consent.data.consent.SyncStatus;
 import com.iemr.consent.data.notice.Purpose;
@@ -46,7 +45,6 @@ import com.iemr.consent.model.consent.NotificationResult;
 import com.iemr.consent.model.consent.PurposeResult;
 import com.iemr.consent.model.consent.SaveConsentRequest;
 import com.iemr.consent.model.consent.SaveConsentResult;
-import com.iemr.consent.repository.consent.ConsentPurposeRepository;
 import com.iemr.consent.repository.consent.ConsentRepository;
 import com.iemr.consent.service.audit.AuditLogService;
 import com.iemr.consent.service.notify.ConsentNotifier;
@@ -57,17 +55,17 @@ import com.iemr.consent.utils.auth.AuthenticatedUser;
  * event, one decision per purpose, the proof rows and the audit entry; if anything fails, nothing
  * is kept.
  *
- * <p>For a known patient, an earlier current decision for the same purpose is marked
- * {@code SUPERSEDED} and the new one gets the next version (plan deviation 6); the current row is
- * locked, so two simultaneous saves cannot both become current. A consent without a patient
- * (taken before registration) is stored unlinked.</p>
+ * <p>Each decision is written by {@link ConsentDecisionWriter}: for a known patient, an earlier current
+ * decision for the same purpose is marked {@code SUPERSEDED} and the new one gets the next version (plan
+ * deviation 6); the current row is locked, so two simultaneous saves cannot both become current. A consent
+ * without a patient (taken before registration) is stored unlinked.</p>
  */
 @Component
 public class ConsentWriter {
 
 	private final ConsentRepository consentRepository;
 
-	private final ConsentPurposeRepository purposeRepository;
+	private final ConsentDecisionWriter decisionWriter;
 
 	private final List<ConsentProofWriter> proofWriters;
 
@@ -81,12 +79,12 @@ public class ConsentWriter {
 
 	private final Duration maxSkew;
 
-	public ConsentWriter(ConsentRepository consentRepository, ConsentPurposeRepository purposeRepository,
+	public ConsentWriter(ConsentRepository consentRepository, ConsentDecisionWriter decisionWriter,
 			List<ConsentProofWriter> proofWriters, DeclarationProofWriter declarationWriter,
 			ConsentNotifier notifier, AuditLogService auditLogService, Clock clock,
 			ConsentProperties properties) {
 		this.consentRepository = consentRepository;
-		this.purposeRepository = purposeRepository;
+		this.decisionWriter = decisionWriter;
 		this.proofWriters = proofWriters;
 		this.declarationWriter = declarationWriter;
 		this.notifier = notifier;
@@ -103,7 +101,8 @@ public class ConsentWriter {
 				.collect(Collectors.toMap(Purpose::getPurposeCode, Function.identity()));
 		List<PurposeResult> results = new ArrayList<>();
 		for (DecisionItem decision : request.decisions()) {
-			results.add(writeDecision(consent, decision, purposes.get(decision.purposeCode())));
+			results.add(decisionWriter.write(consent, decision.purposeCode(), decision.decision(),
+					purposes.get(decision.purposeCode())));
 		}
 		proofWriters.forEach(writer -> writer.write(consent, request, user));
 		declarationWriter.write(consent, validated.declaration(), user);
@@ -113,35 +112,6 @@ public class ConsentWriter {
 				overall(results), user.userId(), sourceIp);
 		return new SaveConsentResult(consent.getConsentId(), consent.getSyncStatus(), results,
 				NotificationResult.notRequested());
-	}
-
-	private PurposeResult writeDecision(Consent consent, DecisionItem decision, Purpose purpose) {
-		int version = 1;
-		Long patient = consent.getBeneficiaryRegId();
-		if (patient != null) {
-			ConsentPurpose previous = purposeRepository.findCurrent(patient, decision.purposeCode())
-					.orElse(null);
-			if (previous != null) {
-				previous.setCurrent(false);
-				previous.setStatus(PurposeStatus.SUPERSEDED);
-				purposeRepository.saveAndFlush(previous);
-				version = previous.getVersionNo() + 1;
-			}
-		}
-		PurposeStatus status = ConsentResultMapper.statusOf(decision.decision());
-		ConsentPurpose row = new ConsentPurpose();
-		row.setConsentId(consent.getConsentId());
-		row.setBeneficiaryRegId(patient);
-		row.setPurposeCode(decision.purposeCode());
-		row.setDecision(decision.decision());
-		row.setStatus(status);
-		row.setVersionNo(version);
-		row.setCurrent(true);
-		if (status == PurposeStatus.GRANTED && purpose.getValidityDays() != null) {
-			row.setValidUntil(consent.getCapturedAt().plus(Duration.ofDays(purpose.getValidityDays())));
-		}
-		purposeRepository.save(row);
-		return new PurposeResult(decision.purposeCode(), status, version);
 	}
 
 	private Consent newConsent(SaveConsentRequest request, String requestKey, String requestHash,

@@ -43,7 +43,7 @@ class FieldEncryptorTest {
 		ConsentProperties base = TestFixtures.consentProperties();
 		return new ConsentProperties(base.request(), base.health(), base.redis(), base.rateLimit(), base.evidence(),
 				base.capture(), base.commonApi(), base.notice(), base.otp(), new ConsentProperties.Encryption(key),
-				base.accessGrant(), base.sms(), base.admin(), base.translation());
+				base.accessGrant(), base.sms(), base.admin(), base.translation(), base.legacy());
 	}
 
 	@Test

@@ -41,7 +41,7 @@ class ServiceKeyInterceptorTest {
 		return new ServiceKeyInterceptor(new ConsentProperties(base.request(), base.health(), base.redis(),
 				base.rateLimit(), base.evidence(), base.capture(), base.commonApi(), base.notice(), base.otp(),
 				base.encryption(), base.accessGrant(), base.sms(), new ConsentProperties.Admin(key),
-				base.translation()));
+				base.translation(), base.legacy()));
 	}
 
 	private static MockHttpServletRequest request(String header) {

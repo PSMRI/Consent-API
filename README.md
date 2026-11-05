@@ -25,6 +25,11 @@ Delivered so far:
   (`consent.admin.service-key`, shared with Common-API).
 - `007-batch-pending-actions`: API 15, the pending actions of a whole MMU search page in one request, with API 9's
   rules.
+- `008-legacy-consent-upload`: the Admin legacy consent upload (A9–A10, called through Common-API, which looks up
+  the 12-digit Beneficiary IDs in Identity-API). A check stores the file's rows with a reason for every problem;
+  an import, once per batch, stores the valid rows as LEGACY consents (mode `PAPER` allowed), which show as
+  "Consent pending" until fresh consent is taken. Needs AMRIT-DB V37 and `consent.legacy.batch-expiry-days`
+  (default 30).
 
 | Method | Path | Purpose |
 |---|---|---|
@@ -46,6 +51,8 @@ Delivered so far:
 | GET | `/consent/v1/admin/projects/{projectId}/notices` | A project's consent messages (A6, via Common-API; needs `X-Consent-Service-Key`) |
 | PUT | `/consent/v1/admin/projects/{projectId}/notices/{context}/draft` | Save the English draft (A7) |
 | POST | `/consent/v1/admin/projects/{projectId}/notices/{context}/publish` | Publish, translate, retire the previous version (A8) |
+| POST | `/consent/v1/admin/legacy/batches` | Check a legacy consent file and store the batch (A9, via Common-API) |
+| POST | `/consent/v1/admin/legacy/batches/{batchId}/import` | Import the batch's valid rows as LEGACY consents, once (A10) |
 
 Every write (`POST` above, except verify) needs an **`Idempotency-Key`** header (a UUID): a
 retry with the same key returns the original answer and never saves, sends or stores twice.

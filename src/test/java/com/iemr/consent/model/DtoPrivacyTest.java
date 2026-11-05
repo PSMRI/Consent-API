@@ -43,6 +43,7 @@ import com.iemr.consent.model.consent.Proof;
 import com.iemr.consent.model.grant.AccessGrantView;
 import com.iemr.consent.model.grant.AccessRequest;
 import com.iemr.consent.model.grant.GranteeView;
+import com.iemr.consent.model.legacy.LegacyRowInput;
 import com.iemr.consent.model.otp.OtpReason;
 import com.iemr.consent.model.otp.OtpSendRequest;
 import com.iemr.consent.model.otp.OtpVerifyRequest;
@@ -74,9 +75,12 @@ class DtoPrivacyTest {
 				new DraftView("Sita notice body", null, null, null, null, null, "I, Sita, agree", null, null,
 						"admin", null).toString(),
 				new PublishedView("Sita notice body", null, null, null, null, null, "I, Sita, agree", null, null, 1L,
-						1, "admin", null, false, null, false).toString());
+						1, "admin", null, false, null, false).toString(),
+				new LegacyRowInput(2, "100245678901", 7001L, "2025-06-12", "P-REG", "hi", "WITNESSED", "Gita Bai",
+						"Neighbour", "Sita signed at camp").toString());
 
 		assertThat(printed).allSatisfy(text -> assertThat(text).doesNotContain("9876543210").doesNotContain("123456")
-				.doesNotContain("Gita").doesNotContain("Sita"));
+				.doesNotContain("Gita").doesNotContain("Sita")
+				.doesNotContain("100245678901"));
 	}
 }

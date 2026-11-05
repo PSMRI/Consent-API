@@ -51,7 +51,8 @@ public record ConsentProperties(@Valid @DefaultValue Request request, @Valid @De
 		@Valid @DefaultValue CommonApi commonApi, @Valid @DefaultValue Notice notice,
 		@Valid @DefaultValue Otp otp, @Valid @DefaultValue Encryption encryption,
 		@Valid @DefaultValue AccessGrant accessGrant, @Valid @DefaultValue Sms sms,
-		@Valid @DefaultValue Admin admin, @Valid @DefaultValue Translation translation) {
+		@Valid @DefaultValue Admin admin, @Valid @DefaultValue Translation translation,
+		@Valid @DefaultValue Legacy legacy) {
 
 	/** @param maxBodyBytes largest accepted request body, in bytes */
 	public record Request(@DefaultValue("1048576") @Positive long maxBodyBytes) {
@@ -176,5 +177,13 @@ public record ConsentProperties(@Valid @DefaultValue Request request, @Valid @De
 	 * @param timeoutMs longest wait for one language; a timeout publishes nothing
 	 */
 	public record Translation(@DefaultValue("") String provider, @DefaultValue("10000") @Positive int timeoutMs) {
+	}
+
+	/**
+	 * Legacy consent upload (feature 008, research R9).
+	 *
+	 * @param batchExpiryDays a checked file can be imported for this many days
+	 */
+	public record Legacy(@DefaultValue("30") @Positive int batchExpiryDays) {
 	}
 }

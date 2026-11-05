@@ -53,6 +53,12 @@ public interface AuditLogService {
 	String EVIDENCE_PURGED = "EVIDENCE_PURGED";
 
 	/**
+	 * Audit action for a proof file played or downloaded. Summary {@code evidence:<id>;type:<type>}, status
+	 * VIEWED or DOWNLOADED; no personal data.
+	 */
+	String EVIDENCE_ACCESSED = "EVIDENCE_ACCESSED";
+
+	/**
 	 * Audit action for a published notice (feature 006). Its {@code consentId} is null and its purpose summary is
 	 * {@code notice:<id>;project:<id>;context:<ctx>;v:<n>;langs:<codes>;material:<bool>}; no notice text.
 	 */
@@ -63,6 +69,18 @@ public interface AuditLogService {
 	 * {@code notice:<id>;project:<id>;context:<ctx>;v:<n>}; no notice text.
 	 */
 	String NOTICE_DRAFT_SAVED = "NOTICE_DRAFT_SAVED";
+
+	/**
+	 * Audit action for a checked legacy file (A9, feature 008). Its {@code consentId} and patient are null and its
+	 * summary is {@code batch:<id>;rows:<n>;valid:<v>}; no names, remarks or Beneficiary IDs.
+	 */
+	String LEGACY_CHECKED = "LEGACY_CHECKED";
+
+	/**
+	 * Audit action for an imported legacy consent (A10, feature 008). Summary
+	 * {@code P-REG:GRANTED,…;batch:<id>;row:<n>}; no names, remarks or Beneficiary IDs.
+	 */
+	String LEGACY_IMPORTED = "LEGACY_IMPORTED";
 
 	/**
 	 * @param purposeSummary purpose codes with statuses, e.g. {@code P-REG:GRANTED,P-REM:DENIED}; no
