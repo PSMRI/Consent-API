@@ -1,0 +1,36 @@
+name: Package
+
+on:
+  push:
+    branches: [ "develop" ]
+    paths-ignore:
+      - target/**
+  pull_request:
+    branches: [ "develop" ]
+    paths-ignore:
+      - target/**
+
+env:
+  ENV_VAR: ci
+
+jobs:
+  Package-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: 17
+          distribution: 'temurin'
+
+      - name: Build WAR with Maven
+        run: mvn -B clean install -DENV_VAR=${{ env.ENV_VAR }}
+
+      - name: Upload WAR file as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Consent-API
+          path: target/consent-api-*.war
