@@ -26,6 +26,8 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -106,6 +108,21 @@ class ConsentControllerTest {
 		mvc.perform(save(BODY.replace("van-07", "van 07; drop")).header("Idempotency-Key", KEY))
 				.andExpect(status().isBadRequest()).andExpect(jsonPath("$.error.details[0].field").value("deviceId"));
 		mvc.perform(save("{}").header("Idempotency-Key", KEY)).andExpect(status().isBadRequest());
+	}
+
+	@Test
+	void saveWithoutAPositivePatientIs400AndNothingIsSaved() throws Exception {
+		List<String> bodies = List.of(BODY.replace("\"beneficiaryRegId\":1001,", ""),
+				BODY.replace("\"beneficiaryRegId\":1001", "\"beneficiaryRegId\":null"),
+				BODY.replace("\"beneficiaryRegId\":1001", "\"beneficiaryRegId\":0"),
+				BODY.replace("\"beneficiaryRegId\":1001", "\"beneficiaryRegId\":-5"));
+		for (String body : bodies) {
+			mvc.perform(save(body).header("Idempotency-Key", KEY)).andExpect(status().isBadRequest())
+					.andExpect(jsonPath("$.statusCode").value(400))
+					.andExpect(jsonPath("$.error.code").value("VALIDATION_FAILED"))
+					.andExpect(jsonPath("$.error.details[0].field").value("beneficiaryRegId"));
+		}
+		verify(service, never()).save(any(), anyString(), anyString(), any(), anyString(), any());
 	}
 
 	@Test

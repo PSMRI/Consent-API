@@ -30,6 +30,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.iemr.consent.data.AuditColumns;
 import com.iemr.consent.data.audit.AuditLogEntry;
 import com.iemr.consent.repository.audit.AuditLogRepository;
 import com.iemr.consent.utils.crypto.Sha256;
@@ -66,6 +67,7 @@ public class AuditLogServiceImpl implements AuditLogService {
 		entry.setStatus(status);
 		entry.setInitiator(initiator);
 		entry.setSourceIp(sourceIp);
+		entry.setCreatedBy(initiator != null ? String.valueOf(initiator) : AuditColumns.SYSTEM_USER);
 		entry.setCreatedAt(clock.instant());
 		entry.setPrevHash(prevHash);
 		entry.setEntryHash(entryHash(prevHash, entry));

@@ -29,15 +29,12 @@ import jakarta.persistence.MappedSuperclass;
 import lombok.Getter;
 import lombok.Setter;
 
-/**
- * Standard AMRIT audit columns with soft delete (constitution IX), for every {@code cm_} table
- * except the append-only consent and audit tables. {@code CreatedDate} and {@code LastModDate}
- * are maintained by the database.
- */
 @Getter
 @Setter
 @MappedSuperclass
 public abstract class AuditColumns {
+
+	public static final String SYSTEM_USER = "consent-system";
 
 	@Column(name = "CreatedBy", nullable = false, updatable = false)
 	private String createdBy;
@@ -53,4 +50,25 @@ public abstract class AuditColumns {
 
 	@Column(name = "Deleted", nullable = false)
 	private boolean deleted;
+
+	@Column(name = "Processed", insertable = false, updatable = false)
+	private String processed;
+
+	@Column(name = "VanSerialNo", insertable = false, updatable = false)
+	private Long vanSerialNo;
+
+	@Column(name = "VanID", insertable = false, updatable = false)
+	private Integer vanId;
+
+	@Column(name = "VehicalNo", insertable = false, updatable = false)
+	private String vehicalNo;
+
+	@Column(name = "ParkingPlaceID", insertable = false, updatable = false)
+	private Integer parkingPlaceId;
+
+	@Column(name = "SyncedBy", insertable = false, updatable = false)
+	private String syncedBy;
+
+	@Column(name = "SyncedDate", insertable = false, updatable = false)
+	private Instant syncedDate;
 }

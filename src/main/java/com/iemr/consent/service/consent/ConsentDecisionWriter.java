@@ -36,9 +36,10 @@ import com.iemr.consent.repository.consent.ConsentPurposeRepository;
 
 /**
  * Writes one purpose decision of a saved consent event (research R6 of feature 008), shared by a save (API 7,
- * {@link ConsentWriter}) and the legacy import. For a known patient the current decision for the purpose is marked
- * {@code SUPERSEDED} and the new one gets the next version (the current row is locked by {@code findCurrent}); a
- * granted purpose with validity days is valid until the capture time plus those days. Append-only otherwise.
+ * {@link ConsentWriter}) and the legacy import, both of which always name the patient. The patient's current
+ * decision for the purpose is marked {@code SUPERSEDED} and the new one gets the next version (the current row is
+ * locked by {@code findCurrent}); a granted purpose with validity days is valid until the capture time plus those
+ * days. Append-only otherwise.
  */
 @Component
 public class ConsentDecisionWriter {
@@ -52,18 +53,18 @@ public class ConsentDecisionWriter {
 	public PurposeResult write(Consent consent, String purposeCode, Decision decision, Purpose purpose) {
 		int version = 1;
 		Long patient = consent.getBeneficiaryRegId();
-		if (patient != null) {
-			ConsentPurpose previous = purposeRepository.findCurrent(patient, purposeCode).orElse(null);
-			if (previous != null) {
-				previous.setCurrent(false);
-				previous.setStatus(PurposeStatus.SUPERSEDED);
-				purposeRepository.saveAndFlush(previous);
-				version = previous.getVersionNo() + 1;
-			}
+		ConsentPurpose previous = purposeRepository.findCurrent(patient, purposeCode).orElse(null);
+		if (previous != null) {
+			previous.setCurrent(false);
+			previous.setStatus(PurposeStatus.SUPERSEDED);
+			previous.setModifiedBy(consent.getCreatedBy());
+			purposeRepository.saveAndFlush(previous);
+			version = previous.getVersionNo() + 1;
 		}
 		PurposeStatus status = ConsentResultMapper.statusOf(decision);
 		ConsentPurpose row = new ConsentPurpose();
 		row.setConsentId(consent.getConsentId());
+		row.setCreatedBy(consent.getCreatedBy());
 		row.setBeneficiaryRegId(patient);
 		row.setPurposeCode(purposeCode);
 		row.setDecision(decision);

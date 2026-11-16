@@ -29,11 +29,13 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.time.Instant;
 import java.util.Optional;
 
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
+import com.iemr.consent.data.AuditColumns;
 import com.iemr.consent.data.audit.AuditLogEntry;
 import com.iemr.consent.repository.audit.AuditLogRepository;
 import com.iemr.consent.support.TestFixtures;
@@ -70,6 +72,41 @@ class AuditLogServiceImplTest {
 
 		assertThat(AuditLogServiceImpl.entryHash("p", entry))
 				.isEqualTo(Sha256.hex("pX|||||||2026-10-29T10:00:00Z"));
+	}
+
+	@Test
+	void entryHashIsUnchanged() {
+		AuditLogEntry entry = new AuditLogEntry();
+		entry.setAction(AuditLogService.CONSENT_CAPTURED);
+		entry.setConsentId("c-1");
+		entry.setBeneficiaryRegId(101L);
+		entry.setPurpose("P-REG:GRANT");
+		entry.setStatus("GRANTED");
+		entry.setInitiator(7L);
+		entry.setSourceIp("10.0.0.1");
+		entry.setCreatedAt(Instant.parse("2026-11-16T10:00:00Z"));
+		entry.setCreatedBy("someone-else");
+		entry.setModifiedBy("ignored");
+
+		assertThat(AuditLogServiceImpl.entryHash("0".repeat(64), entry))
+				.as("golden value from before feature 009; the standard columns are not hashed")
+				.isEqualTo("bd84464a852bac9cb6e4f6bd239e125d4799337206246b83c384340c23d53081");
+	}
+
+	@Test
+	void createdByIsTheInitiatorOrTheSystemUser() {
+		AuditLogEntry last = new AuditLogEntry();
+		last.setEntryHash("a".repeat(64));
+		when(repository.findTopByOrderByIdDesc()).thenReturn(Optional.of(last));
+
+		service.append("X", null, null, null, null, 7L, null);
+		service.append("Y", null, null, null, null, null, null);
+
+		ArgumentCaptor<AuditLogEntry> saved = ArgumentCaptor.forClass(AuditLogEntry.class);
+		verify(repository, org.mockito.Mockito.times(2)).save(saved.capture());
+		assertThat(saved.getAllValues()).extracting(AuditLogEntry::getCreatedBy)
+				.containsExactly("7", AuditColumns.SYSTEM_USER);
+		assertThat(saved.getAllValues()).noneMatch(AuditLogEntry::isDeleted);
 	}
 
 	@Test

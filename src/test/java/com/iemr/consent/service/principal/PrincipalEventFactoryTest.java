@@ -198,6 +198,7 @@ class PrincipalEventFactoryTest {
 		assertThat(event.getSyncStatus()).isEqualTo(SyncStatus.SYNCED);
 		assertThat(event.getRequestKey()).isEqualTo("key-1");
 		assertThat(event.getRequestHash()).isEqualTo("hash-1");
+		assertThat(event.getCreatedBy()).isEqualTo(ConsentFixtures.WORKER.auditName());
 
 		WithdrawalRequest withDevice = new WithdrawalRequest(PurposeSelection.everything(), Map.of(), "tab-3", null,
 				null, null);
@@ -209,12 +210,15 @@ class PrincipalEventFactoryTest {
 	void replaceSupersedesThePreviousDecisionAndAddsTheNextVersion() {
 		ConsentPurpose previous = PrincipalFixtures.row("c-1", "P-REM", PurposeStatus.DENIED, 3, null);
 		Consent event = PrincipalFixtures.event("c-9", TestFixtures.NOW);
+		event.setCreatedBy("worker42");
 
 		ConsentPurpose granted = factory.replace(previous, event, PurposeStatus.GRANTED, TestFixtures.NOW);
 
 		assertThat(previous.isCurrent()).isFalse();
 		assertThat(previous.getStatus()).isEqualTo(PurposeStatus.SUPERSEDED);
 		verify(decisions).saveAndFlush(previous);
+		assertThat(previous.getModifiedBy()).isEqualTo("worker42");
+		assertThat(granted.getCreatedBy()).isEqualTo("worker42");
 		assertThat(granted.getConsentId()).isEqualTo("c-9");
 		assertThat(granted.getBeneficiaryRegId()).isEqualTo(BEN);
 		assertThat(granted.getVersionNo()).isEqualTo(4);

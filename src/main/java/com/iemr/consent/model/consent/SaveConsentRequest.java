@@ -37,13 +37,14 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
 
 /**
  * Save consent (front-end API 7, contract {@code SaveConsentRequest}). {@code capturedBy} is
  * accepted for compatibility but ignored: the logged-in user is recorded (FR-015).
  *
- * @param beneficiaryRegId     patient, or {@code null} before registration (stored unlinked)
+ * @param beneficiaryRegId     registered patient's beneficiary registration ID; required (feature 009)
  * @param eventType            NEW, UPDATE or RENEWAL
  * @param consentingParty      SELF or GUARDIAN
  * @param noticeVersionId      from the active notice
@@ -67,7 +68,7 @@ import jakarta.validation.constraints.Size;
  * @param declaration          declaration agreed to; required on an accept, absent on a decline (feature 004)
  * @param notifyRequest        JSON {@code notify}: where to send the Consent ID by SMS, or {@code null} (004)
  */
-public record SaveConsentRequest(Long beneficiaryRegId, @NotNull EventType eventType,
+public record SaveConsentRequest(@NotNull @Positive Long beneficiaryRegId, @NotNull EventType eventType,
 		@NotNull ConsentingParty consentingParty, @NotNull Long noticeVersionId,
 		@NotNull @Pattern(regexp = "^[a-z]{2,3}$") String languageCode,
 		@NotNull @Pattern(regexp = "^[0-9a-f]{64}$") String textHash, @NotNull Channel channel,

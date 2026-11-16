@@ -109,6 +109,7 @@ import com.iemr.consent.service.consent.SignaturePhotoProofRule;
 import com.iemr.consent.service.consent.RecordingRule;
 import com.iemr.consent.service.consent.SelfReadProofRule;
 import com.iemr.consent.service.consent.WitnessedProofRule;
+import com.iemr.consent.service.evidence.EvidenceAccessServiceImpl;
 import com.iemr.consent.service.evidence.EvidenceServiceImpl;
 import com.iemr.consent.service.evidence.EvidenceStorage;
 import com.iemr.consent.service.notify.CommonApiSmsClient;
@@ -149,7 +150,7 @@ import com.iemr.consent.utils.idempotency.RequestHasher;
 	GuardianRule.class, OtpProofRule.class, SelfReadProofRule.class, RecordingRule.class, SignaturePhotoProofRule.class,
 	WitnessedProofRule.class, ReadAloudProofRule.class, EvidenceProofWriter.class, OtpProofWriter.class,
 	GuardianProofWriter.class, DeclarationRule.class, DeclarationProofWriter.class, ConsentNotifier.class,
-	OtpServiceImpl.class, EvidenceServiceImpl.class, AuditLogServiceImpl.class,
+	OtpServiceImpl.class, EvidenceServiceImpl.class, EvidenceAccessServiceImpl.class, AuditLogServiceImpl.class,
 	CaptureFlowTest.SliceConfig.class })
 class CaptureFlowTest {
 

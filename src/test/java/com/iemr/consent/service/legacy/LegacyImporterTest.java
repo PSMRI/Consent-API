@@ -163,6 +163,7 @@ class LegacyImporterTest {
 		assertThat(consent.getChannel()).isEqualTo(Channel.FACILITY);
 		assertThat(consent.getMode()).isEqualTo(ConsentMode.PAPER);
 		assertThat(consent.getCapturedBy()).isEqualTo(42L);
+		assertThat(consent.getCreatedBy()).isEqualTo(ConsentFixtures.WORKER.auditName());
 		assertThat(consent.getDeviceId()).isEqualTo("legacy-import");
 		assertThat(consent.getCapturedAt()).isEqualTo(Instant.parse("2025-06-11T18:30:00Z"));
 		assertThat(consent.getServerReceivedAt()).isEqualTo(TestFixtures.NOW);

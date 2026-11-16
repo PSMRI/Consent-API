@@ -55,10 +55,10 @@ import com.iemr.consent.utils.auth.AuthenticatedUser;
  * event, one decision per purpose, the proof rows and the audit entry; if anything fails, nothing
  * is kept.
  *
- * <p>Each decision is written by {@link ConsentDecisionWriter}: for a known patient, an earlier current
- * decision for the same purpose is marked {@code SUPERSEDED} and the new one gets the next version (plan
- * deviation 6); the current row is locked, so two simultaneous saves cannot both become current. A consent
- * without a patient (taken before registration) is stored unlinked.</p>
+ * <p>Each decision is written by {@link ConsentDecisionWriter}: an earlier current decision of the patient for
+ * the same purpose is marked {@code SUPERSEDED} and the new one gets the next version (plan deviation 6); the
+ * current row is locked, so two simultaneous saves cannot both become current. A save always names its patient
+ * (feature 009).</p>
  */
 @Component
 public class ConsentWriter {
@@ -120,6 +120,7 @@ public class ConsentWriter {
 		Consent consent = new Consent();
 		consent.setConsentId(UUID.randomUUID().toString());
 		consent.setBeneficiaryRegId(request.beneficiaryRegId());
+		consent.setCreatedBy(user.auditName());
 		consent.setEventType(request.eventType());
 		consent.setConsentingParty(request.consentingParty());
 		consent.setNoticeVersionId(request.noticeVersionId());

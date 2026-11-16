@@ -24,6 +24,8 @@ package com.iemr.consent.data.consent;
 
 import java.time.Instant;
 
+import com.iemr.consent.data.AuditColumns;
+
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -36,14 +38,15 @@ import lombok.Setter;
 
 /**
  * One consent event ({@code cm_consent}). Append-only: the service only ever inserts rows
- * (constitution IX, proposal §5).
+ * (constitution IX, proposal §5). Carries the standard columns of {@link AuditColumns}; {@code CreatedBy} is the
+ * user who saved it and {@code Deleted} stays false (feature 009).
  */
 @Getter
 @Setter
 @NoArgsConstructor
 @Entity
 @Table(name = "cm_consent")
-public class Consent {
+public class Consent extends AuditColumns {
 
 	@Id
 	@Column(name = "consent_id")

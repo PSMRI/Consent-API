@@ -63,6 +63,7 @@ class ConsentDecisionWriterTest {
 		consent.setConsentId("c-1");
 		consent.setBeneficiaryRegId(patient);
 		consent.setCapturedAt(TestFixtures.NOW);
+		consent.setCreatedBy("worker42");
 		return consent;
 	}
 
@@ -103,17 +104,22 @@ class ConsentDecisionWriterTest {
 		assertThat(result.versionNo()).isEqualTo(3);
 		assertThat(previous.isCurrent()).isFalse();
 		assertThat(previous.getStatus()).isEqualTo(PurposeStatus.SUPERSEDED);
+		assertThat(previous.getModifiedBy()).as("supersede records who").isEqualTo("worker42");
 		verify(repository).saveAndFlush(previous);
+		assertThat(saved().getCreatedBy()).isEqualTo("worker42");
 		assertThat(saved().getValidUntil()).as("no validity days").isNull();
 	}
 
 	@Test
-	void unlinkedConsentAndDenialsHaveNoSupersedeOrValidity() {
-		PurposeResult result = writer.write(consent(null), "P-REM", Decision.DENY,
+	void firstDecisionAndDenialsHaveNoSupersedeOrValidity() {
+		when(repository.findCurrent(7L, "P-REM")).thenReturn(Optional.empty());
+
+		PurposeResult result = writer.write(consent(7L), "P-REM", Decision.DENY,
 				ConsentFixtures.purpose("P-REM", false, 365, 1));
 
 		assertThat(result).isEqualTo(new PurposeResult("P-REM", PurposeStatus.DENIED, 1));
-		verify(repository, never()).findCurrent(any(), any());
+		verify(repository).findCurrent(7L, "P-REM");
+		verify(repository, never()).saveAndFlush(any());
 		assertThat(saved().getValidUntil()).isNull();
 	}
 }

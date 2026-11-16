@@ -157,6 +157,7 @@ public class PrincipalEventFactory {
 		event.setChannel(Channel.PREFERENCE_CENTRE);
 		event.setMode(mode);
 		event.setCapturedBy(user.userId());
+		event.setCreatedBy(user.auditName());
 		event.setProviderServiceMapId(change.providerServiceMapId());
 		event.setFacilityId(change.facilityId());
 		event.setServiceLine(change.serviceLine());
@@ -174,9 +175,11 @@ public class PrincipalEventFactory {
 			Instant validUntil) {
 		previous.setCurrent(false);
 		previous.setStatus(PurposeStatus.SUPERSEDED);
+		previous.setModifiedBy(event.getCreatedBy());
 		purposeRepository.saveAndFlush(previous);
 		ConsentPurpose row = new ConsentPurpose();
 		row.setConsentId(event.getConsentId());
+		row.setCreatedBy(event.getCreatedBy());
 		row.setBeneficiaryRegId(event.getBeneficiaryRegId());
 		row.setPurposeCode(previous.getPurposeCode());
 		row.setDecision(status == PurposeStatus.GRANTED ? Decision.GRANT : Decision.DENY);

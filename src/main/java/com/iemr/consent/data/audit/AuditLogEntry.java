@@ -24,6 +24,8 @@ package com.iemr.consent.data.audit;
 
 import java.time.Instant;
 
+import com.iemr.consent.data.AuditColumns;
+
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
@@ -37,14 +39,14 @@ import lombok.Setter;
 /**
  * One hash-chained, append-only audit entry ({@code cm_audit_log}): {@code entry_hash} =
  * SHA-256 of {@code prev_hash} and the entry's content. Holds IDs and codes only, no personal
- * values.
+ * values. Carries the standard columns of {@link AuditColumns}, which are not part of the hash (feature 009).
  */
 @Getter
 @Setter
 @NoArgsConstructor
 @Entity
 @Table(name = "cm_audit_log")
-public class AuditLogEntry {
+public class AuditLogEntry extends AuditColumns {
 
 	@Id
 	@GeneratedValue(strategy = GenerationType.IDENTITY)

@@ -57,13 +57,18 @@ import jakarta.persistence.Column;
 import jakarta.persistence.Table;
 
 /**
- * Entities must map exactly the columns of AMRIT-DB {@code V30__Consent_Manager_Capture.sql}
- * (data-model.md); checked by reflection, no database needed.
+ * Entities must map exactly the columns of AMRIT-DB {@code V33}–{@code V38} (data-model.md); every cm_ entity,
+ * append-only ones included, carries the 12 standard AMRIT columns (feature 009). Checked by reflection, no
+ * database needed.
  */
 class EntityMappingTest {
 
+	private static final Set<String> VAN_SYNC = Set.of("Processed", "VanSerialNo", "VanID", "VehicalNo",
+			"ParkingPlaceID", "SyncedBy", "SyncedDate");
+
 	private static final Set<String> AUDIT = Set.of("CreatedBy", "CreatedDate", "ModifiedBy", "LastModDate",
-			"Deleted");
+			"Deleted", "Processed", "VanSerialNo", "VanID", "VehicalNo", "ParkingPlaceID", "SyncedBy",
+			"SyncedDate");
 
 	private static final Map<Class<?>, List<String>> EXPECTED = Map.of(
 			Purpose.class, List.of("cm_purpose", "purpose_id", "purpose_code", "version", "name",
@@ -126,9 +131,7 @@ class EntityMappingTest {
 			assertThat(entity.getAnnotation(Table.class).name()).as(entity.getSimpleName())
 					.isEqualTo(expected.get(0));
 			Set<String> want = new TreeSet<>(expected.subList(1, expected.size()));
-			if (!APPEND_ONLY.contains(entity)) {
-				want.addAll(AUDIT);
-			}
+			want.addAll(AUDIT);
 			assertThat(columns(entity)).as(entity.getSimpleName()).isEqualTo(want);
 		});
 	}
@@ -192,10 +195,27 @@ class EntityMappingTest {
 	}
 
 	@Test
-	void appendOnlyTablesHaveNoSoftDeleteColumns() {
+	void appendOnlyTablesExtendAuditColumns() {
 		for (Class<?> entity : APPEND_ONLY) {
-			assertThat(AuditColumns.class.isAssignableFrom(entity)).as(entity.getSimpleName()).isFalse();
+			assertThat(AuditColumns.class.isAssignableFrom(entity)).as(entity.getSimpleName()).isTrue();
 		}
+	}
+
+	@Test
+	void vanAndSyncColumnsAndDatesAreReadOnly() {
+		Set<String> readOnly = new TreeSet<>(VAN_SYNC);
+		readOnly.addAll(List.of("CreatedDate", "LastModDate"));
+		Set<String> found = new TreeSet<>();
+		for (Field field : AuditColumns.class.getDeclaredFields()) {
+			Column column = field.getAnnotation(Column.class);
+			if (column != null && readOnly.contains(column.name())) {
+				assertThat(column.insertable()).as(column.name()).isFalse();
+				assertThat(column.updatable()).as(column.name()).isFalse();
+				found.add(column.name());
+			}
+		}
+		assertThat(found).isEqualTo(readOnly);
+		assertThat(AuditColumns.SYSTEM_USER).isEqualTo("consent-system");
 	}
 
 	@Test

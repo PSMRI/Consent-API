@@ -210,6 +210,7 @@ public class LegacyImporter {
 		consent.setChannel(Channel.FACILITY);
 		consent.setMode(ConsentMode.valueOf(row.getMode()));
 		consent.setCapturedBy(user.userId());
+		consent.setCreatedBy(user.auditName());
 		consent.setDeviceId(DEVICE_ID);
 		consent.setCapturedAt(capturedAt(row));
 		consent.setServerReceivedAt(now);

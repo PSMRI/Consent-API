@@ -24,6 +24,8 @@ package com.iemr.consent.data.consent;
 
 import java.time.Instant;
 
+import com.iemr.consent.data.AuditColumns;
+
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -40,14 +42,15 @@ import lombok.Setter;
  * The decision for one purpose within a consent event ({@code cm_consent_purpose}). The only
  * change ever made to a stored row is the supersede step ({@code is_current}, {@code status});
  * {@code current_key} is a database-generated column backing "one current decision per patient
- * and purpose".
+ * and purpose". Carries the standard columns of {@link AuditColumns}: {@code CreatedBy} is the consent's creator,
+ * and the supersede step sets {@code ModifiedBy} (feature 009).
  */
 @Getter
 @Setter
 @NoArgsConstructor
 @Entity
 @Table(name = "cm_consent_purpose")
-public class ConsentPurpose {
+public class ConsentPurpose extends AuditColumns {
 
 	@Id
 	@GeneratedValue(strategy = GenerationType.IDENTITY)

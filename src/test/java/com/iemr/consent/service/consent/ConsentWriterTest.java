@@ -27,7 +27,6 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -212,11 +211,10 @@ class ConsentWriterTest {
 	}
 
 	@Test
-	void consentBeforeRegistrationIsStoredUnlinked() {
-		write(ConsentFixtures.request().beneficiary(null).build());
-
-		verify(purposes, never()).findCurrent(any(), anyString());
-		assertThat(savedPurposes()).allMatch(row -> row.getBeneficiaryRegId() == null && row.getVersionNo() == 1);
+	void theConsentIsCreatedByTheLoggedInUser() {
+		write(ConsentFixtures.request().build());
+		assertThat(savedConsent().getCreatedBy()).isEqualTo(ConsentFixtures.WORKER.auditName());
+		assertThat(savedConsent().isDeleted()).isFalse();
 	}
 
 	@Test
