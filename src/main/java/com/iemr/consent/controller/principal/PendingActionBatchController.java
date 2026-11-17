@@ -47,6 +47,7 @@ import com.iemr.consent.utils.response.FieldErrorDetail;
 import io.swagger.v3.oas.annotations.Operation;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Positive;
 
 /**
  * API 15 (feature 007): the pending actions of every patient on an MMU search page, so the "Consent pending" chip
@@ -68,19 +69,19 @@ public class PendingActionBatchController {
 		this.clock = clock;
 	}
 
-	@Operation(summary = "Pending actions of up to 100 patients (front-end API 15)")
+	@Operation(summary = "Pending actions of up to 100 patients (front-end API 15); optional projectId")
 	@PostMapping(value = "/consent/v1/principals/pending-actions/batch",
 			consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
 	public ApiResponse<Map<Long, List<PendingAction>>> batch(@Valid @RequestBody PendingActionBatchRequest body,
 			@RequestParam(defaultValue = "REGISTRATION") NoticeContext context,
-			HttpServletRequest request) {
+			@RequestParam(required = false) @Positive Integer projectId, HttpServletRequest request) {
 		Set<Long> ids = new LinkedHashSet<>(body.beneficiaryRegIds());
 		if (ids.size() > MAX_IDS) {
 			FieldErrorDetail detail = new FieldErrorDetail("beneficiaryRegIds",
 					"must contain at most " + MAX_IDS + " different ids");
 			throw new ConsentApiException(ErrorCode.VALIDATION_FAILED, null, null, List.of(detail));
 		}
-		Map<Long, List<PendingAction>> pending = pendingActionService.pendingFor(ids, context);
+		Map<Long, List<PendingAction>> pending = pendingActionService.pendingFor(ids, context, projectId);
 		return ApiResponse.ok(pending, TraceIdFilter.currentTraceId(request), clock);
 	}
 }

@@ -87,7 +87,7 @@ class PendingActionBatchControllerTest {
 		Map<Long, List<PendingAction>> answer = new LinkedHashMap<>();
 		answer.put(101L, List.of(new PendingAction(PendingReason.CONSENT_MISSING, List.of("P-REG"), null)));
 		answer.put(102L, List.of());
-		when(service.pendingFor(Set.of(101L, 102L), NoticeContext.REGISTRATION)).thenReturn(answer);
+		when(service.pendingFor(Set.of(101L, 102L), NoticeContext.REGISTRATION, null)).thenReturn(answer);
 
 		send("{\"beneficiaryRegIds\":[101,102]}").andExpect(status().isOk())
 				.andExpect(jsonPath("$.statusCode").value(200))
@@ -101,7 +101,23 @@ class PendingActionBatchControllerTest {
 	void revisitIsPassedThrough() throws Exception {
 		mvc.perform(post(PATH + "?context=REVISIT").contentType(MediaType.APPLICATION_JSON)
 				.content("{\"beneficiaryRegIds\":[7]}")).andExpect(status().isOk());
-		verify(service).pendingFor(Set.of(7L), NoticeContext.REVISIT);
+		verify(service).pendingFor(Set.of(7L), NoticeContext.REVISIT, null);
+	}
+
+	@Test
+	void batchPassesTheProject() throws Exception {
+		mvc.perform(post(PATH + "?projectId=3").contentType(MediaType.APPLICATION_JSON)
+				.content("{\"beneficiaryRegIds\":[7]}")).andExpect(status().isOk());
+		verify(service).pendingFor(Set.of(7L), NoticeContext.REGISTRATION, 3);
+	}
+
+	@Test
+	void batchRefusesANonPositiveProject() throws Exception {
+		mvc.perform(post(PATH + "?projectId=-1").contentType(MediaType.APPLICATION_JSON)
+				.content("{\"beneficiaryRegIds\":[7]}")).andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.error.code").value("VALIDATION_FAILED"))
+				.andExpect(jsonPath("$.error.details[0].field").value("projectId"));
+		verifyNoInteractions(service);
 	}
 
 	@Test
@@ -112,7 +128,7 @@ class PendingActionBatchControllerTest {
 
 		@SuppressWarnings("unchecked")
 		ArgumentCaptor<java.util.Collection<Long>> sent = ArgumentCaptor.forClass(java.util.Collection.class);
-		verify(service).pendingFor(sent.capture(), eq(NoticeContext.REGISTRATION));
+		verify(service).pendingFor(sent.capture(), eq(NoticeContext.REGISTRATION), eq(null));
 		org.assertj.core.api.Assertions.assertThat(sent.getValue()).hasSize(100).startsWith(1L, 2L, 3L).endsWith(100L);
 	}
 
@@ -136,6 +152,6 @@ class PendingActionBatchControllerTest {
 				.andExpect(jsonPath("$.error.code").value("MALFORMED_REQUEST"));
 		send("not json").andExpect(status().isBadRequest())
 				.andExpect(jsonPath("$.error.code").value("MALFORMED_REQUEST"));
-		verify(service, org.mockito.Mockito.never()).pendingFor(any(), any());
+		verify(service, org.mockito.Mockito.never()).pendingFor(any(), any(), any());
 	}
 }

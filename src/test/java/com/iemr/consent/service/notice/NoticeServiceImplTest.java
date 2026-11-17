@@ -253,6 +253,22 @@ class NoticeServiceImplTest {
 	}
 
 	@Test
+	@DisplayName("Feature 010: the applicable notice is the project's published notice, else the central one")
+	void applicableNoticePrefersThePublishedProjectNotice() {
+		projectNotice();
+
+		assertThat(service.applicableNotice(NoticeContext.REGISTRATION, 3)).get()
+				.extracting(Notice::getNoticeVersionId).isEqualTo(PROJECT_NOTICE_ID);
+		assertThat(service.applicableNotice(NoticeContext.REGISTRATION, 5)).get()
+				.extracting(Notice::getNoticeVersionId).isEqualTo(ID);
+		assertThat(service.applicableNotice(NoticeContext.REGISTRATION, null)).get()
+				.extracting(Notice::getNoticeVersionId).isEqualTo(ID);
+		verify(notices, never()).findFirstByContextAndProjectIdAndStatusAndDeletedFalseOrderByVersionNoDesc(
+				NoticeContext.REGISTRATION, null, NoticeStatus.PUBLISHED);
+		assertThat(service.applicableNotice(NoticeContext.REVISIT, 3)).isEmpty();
+	}
+
+	@Test
 	@DisplayName("US1: grievance contact is present when any one of its fields is set")
 	void grievanceWithOnlySomeFields() {
 		Notice notice = ConsentFixtures.notice(NoticeStatus.PUBLISHED);

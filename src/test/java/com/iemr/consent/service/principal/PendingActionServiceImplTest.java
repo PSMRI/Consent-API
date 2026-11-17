@@ -59,6 +59,9 @@ import com.iemr.consent.repository.consent.ConsentRepository;
 import com.iemr.consent.repository.consent.GuardianLinkRepository;
 import com.iemr.consent.repository.notice.NoticePurposeRepository;
 import com.iemr.consent.repository.notice.NoticeRepository;
+import com.iemr.consent.repository.notice.NoticeTranslationRepository;
+import com.iemr.consent.repository.notice.PurposeRepository;
+import com.iemr.consent.service.notice.NoticeServiceImpl;
 import com.iemr.consent.support.ConsentFixtures;
 import com.iemr.consent.support.PrincipalFixtures;
 import com.iemr.consent.support.TestFixtures;
@@ -68,6 +71,12 @@ class PendingActionServiceImplTest {
 	private static final Long BEN = PrincipalFixtures.BEN;
 
 	private static final Long REVISIT_NOTICE = 12L;
+
+	private static final Long PROJECT_NOTICE = 6L;
+
+	private static final Long CENTRAL_SIX = 1L;
+
+	private static final int PROJECT = 3;
 
 	private ConsentPurposeRepository decisions;
 
@@ -97,8 +106,47 @@ class PendingActionServiceImplTest {
 		when(noticePurposes.findByNoticeVersionIdAndDeletedFalseOrderByDisplayRankAsc(ConsentFixtures.NOTICE_ID))
 				.thenReturn(List.of(link("P-REG"), link("P-REM")));
 		when(consents.findByConsentIdIn(any())).thenReturn(events);
-		service = new PendingActionServiceImpl(decisions, consents, notices, noticePurposes, links,
+		NoticeServiceImpl noticeService = new NoticeServiceImpl(notices, mock(NoticeTranslationRepository.class),
+				noticePurposes, mock(PurposeRepository.class), TestFixtures.consentProperties());
+		service = new PendingActionServiceImpl(decisions, consents, notices, noticePurposes, noticeService, links,
 				new EffectiveStatus(TestFixtures.CLOCK), TestFixtures.CLOCK);
+	}
+
+	/** Project 3's published REGISTRATION notice (id 6): P-REG, P-REM, P-TRT, as on UAT. */
+	private Notice projectNotice(Long id, String... codes) {
+		Notice notice = ConsentFixtures.notice(NoticeStatus.PUBLISHED);
+		notice.setNoticeVersionId(id);
+		notice.setNoticeCode("MMU-REGISTRATION-P3");
+		notice.setProjectId(PROJECT);
+		when(notices.findById(id)).thenReturn(Optional.of(notice));
+		when(notices.findFirstByContextAndProjectIdAndStatusAndDeletedFalseOrderByVersionNoDesc(
+				NoticeContext.REGISTRATION, PROJECT, NoticeStatus.PUBLISHED)).thenReturn(Optional.of(notice));
+		when(noticePurposes.findByNoticeVersionIdAndDeletedFalseOrderByDisplayRankAsc(id))
+				.thenReturn(java.util.Arrays.stream(codes).map(PendingActionServiceImplTest::link).toList());
+		return notice;
+	}
+
+	/** The central notice asks six purposes, as on UAT (id 1). */
+	private void centralAsksSix() {
+		Notice central = ConsentFixtures.notice(NoticeStatus.PUBLISHED);
+		central.setNoticeVersionId(CENTRAL_SIX);
+		when(notices.findFirstByContextAndProjectIdIsNullAndStatusAndDeletedFalseOrderByVersionNoDesc(
+				NoticeContext.REGISTRATION, NoticeStatus.PUBLISHED)).thenReturn(Optional.of(central));
+		when(notices.findById(CENTRAL_SIX)).thenReturn(Optional.of(central));
+		when(noticePurposes.findByNoticeVersionIdAndDeletedFalseOrderByDisplayRankAsc(CENTRAL_SIX)).thenReturn(
+				List.of(link("P-REG"), link("P-TRT"), link("P-REM"), link("P-FAM"), link("P-SHR"), link("P-RES")));
+	}
+
+	/** An event on a given notice, received at a given time. */
+	private Consent eventOn(String id, Long noticeId, Instant receivedAt) {
+		Consent consent = PrincipalFixtures.event(id, receivedAt);
+		consent.setNoticeVersionId(noticeId);
+		events.add(consent);
+		return consent;
+	}
+
+	private static ConsentPurpose granted(String consentId, String code) {
+		return PrincipalFixtures.row(consentId, code, PurposeStatus.GRANTED, 1, null);
 	}
 
 	private static NoticePurpose link(String code) {
@@ -120,7 +168,7 @@ class PendingActionServiceImplTest {
 	}
 
 	private List<PendingAction> pending() {
-		return service.pending(BEN, NoticeContext.REGISTRATION);
+		return service.pending(BEN, NoticeContext.REGISTRATION, null);
 	}
 
 	@Test
@@ -151,15 +199,96 @@ class PendingActionServiceImplTest {
 	}
 
 	@Test
-	@DisplayName("US1 (004): pending actions use the central notice only, never a project notice")
-	void pendingActionsUseTheCentralNoticeOnly() {
+	@DisplayName("Feature 010 (UAT 10695536): a consent on project 3's notice is checked against that notice")
+	void projectConsentIsCheckedAgainstItsProjectNotice() {
+		centralAsksSix();
+		projectNotice(PROJECT_NOTICE, "P-REG", "P-REM", "P-TRT");
+		eventOn("c-1", PROJECT_NOTICE, TestFixtures.NOW.minusSeconds(7200));
+		eventOn("c-2", PROJECT_NOTICE, TestFixtures.NOW.minusSeconds(3600));
+		current(granted("c-1", "P-REG"), granted("c-2", "P-REM"), granted("c-2", "P-TRT"));
+
+		assertThat(pending()).isEmpty();
+		verify(notices).findFirstByContextAndProjectIdAndStatusAndDeletedFalseOrderByVersionNoDesc(
+				NoticeContext.REGISTRATION, PROJECT, NoticeStatus.PUBLISHED);
+	}
+
+	@Test
+	@DisplayName("Feature 010: a newer project version asks only its new purpose")
+	void newerProjectVersionAddsOnlyItsNewPurpose() {
+		centralAsksSix();
+		Notice old = projectNotice(PROJECT_NOTICE, "P-REG", "P-REM", "P-TRT");
+		projectNotice(7L, "P-REG", "P-REM", "P-TRT", "P-RES");
+		when(notices.findById(PROJECT_NOTICE)).thenReturn(Optional.of(old));
+		eventOn("c-1", PROJECT_NOTICE, TestFixtures.NOW.minusSeconds(3600));
+		current(granted("c-1", "P-REG"), granted("c-1", "P-REM"), granted("c-1", "P-TRT"));
+
+		assertThat(pending()).containsExactly(
+				new PendingAction(PendingReason.CONSENT_MISSING, List.of("P-RES"), null));
+	}
+
+	@Test
+	@DisplayName("Feature 010, R1: the latest event decides the project; equal times use the greater consent ID")
+	void latestEventDecidesTheProject() {
+		centralAsksSix();
+		projectNotice(PROJECT_NOTICE, "P-REG", "P-REM", "P-TRT");
+		Instant early = TestFixtures.NOW.minusSeconds(7200);
+		Instant late = TestFixtures.NOW.minusSeconds(3600);
+		eventOn("c-a", CENTRAL_SIX, early);
+		eventOn("c-b", PROJECT_NOTICE, late);
+		current(granted("c-a", "P-REG"), granted("c-b", "P-REM"), granted("c-b", "P-TRT"));
+		assertThat(pending()).as("latest on project 3").isEmpty();
+
+		events.clear();
+		eventOn("c-a", PROJECT_NOTICE, early);
+		eventOn("c-b", CENTRAL_SIX, late);
+		assertThat(pending()).as("latest on the central notice")
+				.containsExactly(new PendingAction(PendingReason.CONSENT_MISSING,
+						List.of("P-FAM", "P-RES", "P-SHR"), null));
+
+		events.clear();
+		eventOn("c-a", CENTRAL_SIX, late);
+		eventOn("c-b", PROJECT_NOTICE, late);
+		assertThat(pending()).as("same time: greater consent ID (project)").isEmpty();
+	}
+
+	@Test
+	@DisplayName("Feature 010: a project without a published notice falls back to the central notice")
+	void projectWithoutPublishedNoticeFallsBackToCentral() {
+		centralAsksSix();
+		projectNotice(PROJECT_NOTICE, "P-REG", "P-REM", "P-TRT");
+		when(notices.findFirstByContextAndProjectIdAndStatusAndDeletedFalseOrderByVersionNoDesc(
+				NoticeContext.REGISTRATION, PROJECT, NoticeStatus.PUBLISHED)).thenReturn(Optional.empty());
+		eventOn("c-1", PROJECT_NOTICE, TestFixtures.NOW.minusSeconds(3600));
+		current(granted("c-1", "P-REG"), granted("c-1", "P-REM"), granted("c-1", "P-TRT"));
+
+		assertThat(pending()).containsExactly(new PendingAction(PendingReason.CONSENT_MISSING,
+				List.of("P-FAM", "P-RES", "P-SHR"), null));
+	}
+
+	@Test
+	@DisplayName("Feature 010, US2: the caller's project wins over the latest event")
+	void callerProjectWinsOverTheLatestEvent() {
+		centralAsksSix();
+		projectNotice(PROJECT_NOTICE, "P-REG", "P-REM", "P-TRT");
+		eventOn("c-1", CENTRAL_SIX, TestFixtures.NOW.minusSeconds(3600));
+		current(granted("c-1", "P-REG"), granted("c-1", "P-REM"), granted("c-1", "P-TRT"));
+
+		assertThat(pending()).as("no project: central").extracting(PendingAction::purposeCodes)
+				.containsExactly(List.of("P-FAM", "P-RES", "P-SHR"));
+		assertThat(service.pending(BEN, NoticeContext.REGISTRATION, PROJECT)).as("project 3").isEmpty();
+	}
+
+	@Test
+	@DisplayName("Feature 010, US2: with a project, a patient without consent needs that project's purposes")
+	void callerProjectForAPatientWithoutConsent() {
+		centralAsksSix();
+		projectNotice(PROJECT_NOTICE, "P-REG", "P-REM", "P-TRT");
 		current();
-		pending();
-		verify(notices).findFirstByContextAndProjectIdIsNullAndStatusAndDeletedFalseOrderByVersionNoDesc(
-				NoticeContext.REGISTRATION, NoticeStatus.PUBLISHED);
-		verify(notices, never())
-				.findFirstByContextAndProjectIdAndStatusAndDeletedFalseOrderByVersionNoDesc(any(),
-				any(), any());
+
+		assertThat(service.pending(BEN, NoticeContext.REGISTRATION, PROJECT)).containsExactly(
+				new PendingAction(PendingReason.CONSENT_MISSING, List.of("P-REG", "P-REM", "P-TRT"), null));
+		assertThat(pending()).extracting(PendingAction::purposeCodes)
+				.containsExactly(List.of("P-FAM", "P-REG", "P-REM", "P-RES", "P-SHR", "P-TRT"));
 	}
 
 	@Test
@@ -171,7 +300,7 @@ class PendingActionServiceImplTest {
 		when(noticePurposes.findByNoticeVersionIdAndDeletedFalseOrderByDisplayRankAsc(REVISIT_NOTICE))
 				.thenReturn(List.of(link("P-TRT")));
 		current();
-		assertThat(service.pending(BEN, NoticeContext.REVISIT))
+		assertThat(service.pending(BEN, NoticeContext.REVISIT, null))
 				.containsExactly(new PendingAction(PendingReason.CONSENT_MISSING, List.of("P-TRT"),
 						null));
 
@@ -325,8 +454,7 @@ class PendingActionServiceImplTest {
 		void sameAnswerAsApi9() {
 			List<ConsentPurpose> rows = threePatients();
 
-			Map<Long, List<PendingAction>> batch = service.pendingFor(List.of(NONE, OLD, DONE),
-					NoticeContext.REGISTRATION);
+			Map<Long, List<PendingAction>> batch = service.pendingFor(List.of(NONE, OLD, DONE), NoticeContext.REGISTRATION, null);
 
 			assertThat(batch).containsOnlyKeys(NONE, OLD, DONE);
 			assertThat(batch.keySet()).containsExactly(NONE, OLD, DONE);
@@ -341,7 +469,7 @@ class PendingActionServiceImplTest {
 				when(decisions.findByBeneficiaryRegIdAndCurrentTrue(ben))
 						.thenReturn(rows.stream().filter(r -> r.getBeneficiaryRegId() == ben)
 								.toList());
-				assertThat(service.pending(ben, NoticeContext.REGISTRATION)).as("patient " + ben)
+				assertThat(service.pending(ben, NoticeContext.REGISTRATION, null)).as("patient " + ben)
 						.isEqualTo(batch.get(ben));
 			}
 		}
@@ -354,8 +482,7 @@ class PendingActionServiceImplTest {
 			newer.setPublishedAt(TestFixtures.NOW.minusSeconds(5));
 			when(notices.findNewerMaterial("MMU-REGISTRATION", 1)).thenReturn(List.of(newer));
 
-			Map<Long, List<PendingAction>> batch = service.pendingFor(List.of(NONE, OLD, DONE),
-					NoticeContext.REGISTRATION);
+			Map<Long, List<PendingAction>> batch = service.pendingFor(List.of(NONE, OLD, DONE), NoticeContext.REGISTRATION, null);
 
 			assertThat(batch.get(DONE)).extracting(PendingAction::reason)
 					.containsExactly(PendingReason.RECONSENT_REQUIRED);
@@ -375,7 +502,7 @@ class PendingActionServiceImplTest {
 		void revisitContext() {
 			when(decisions.findByBeneficiaryRegIdInAndCurrentTrue(List.of(NONE))).thenReturn(List.of());
 
-			assertThat(service.pendingFor(List.of(NONE), NoticeContext.REVISIT)).containsEntry(NONE,
+			assertThat(service.pendingFor(List.of(NONE), NoticeContext.REVISIT, null)).containsEntry(NONE,
 					List.of());
 			verify(consents, never()).findByConsentIdIn(any());
 		}
@@ -385,10 +512,61 @@ class PendingActionServiceImplTest {
 		void unknownPatient() {
 			when(decisions.findByBeneficiaryRegIdInAndCurrentTrue(List.of(999L))).thenReturn(List.of());
 
-			assertThat(service.pendingFor(List.of(999L), NoticeContext.REGISTRATION).get(999L))
+			assertThat(service.pendingFor(List.of(999L), NoticeContext.REGISTRATION, null).get(999L))
 					.containsExactly(
 					new PendingAction(PendingReason.CONSENT_MISSING, List.of("P-REG", "P-REM"),
 							null));
+		}
+
+		@Test
+		@DisplayName("Feature 010: a page mixing project, central and no-consent patients equals API 9 per patient")
+		void mixedProjectsOnOnePageEqualApi9() {
+			centralAsksSix();
+			projectNotice(PROJECT_NOTICE, "P-REG", "P-REM", "P-TRT");
+			eventOn("c-p", PROJECT_NOTICE, TestFixtures.NOW.minusSeconds(60));
+			eventOn("c-c", CENTRAL_SIX, TestFixtures.NOW.minusSeconds(60));
+			List<ConsentPurpose> rows = List.of(row(OLD, "c-p", "P-REG", PurposeStatus.GRANTED),
+					row(OLD, "c-p", "P-REM", PurposeStatus.GRANTED), row(OLD, "c-p", "P-TRT", PurposeStatus.GRANTED),
+					row(DONE, "c-c", "P-REG", PurposeStatus.GRANTED));
+			when(decisions.findByBeneficiaryRegIdInAndCurrentTrue(List.of(NONE, OLD, DONE))).thenReturn(rows);
+
+			for (Integer project : java.util.Arrays.asList(null, PROJECT)) {
+				Map<Long, List<PendingAction>> batch = service.pendingFor(List.of(NONE, OLD, DONE),
+						NoticeContext.REGISTRATION, project);
+				for (long ben : List.of(NONE, OLD, DONE)) {
+					when(decisions.findByBeneficiaryRegIdAndCurrentTrue(ben))
+							.thenReturn(rows.stream().filter(r -> r.getBeneficiaryRegId() == ben).toList());
+					assertThat(service.pending(ben, NoticeContext.REGISTRATION, project))
+							.as("patient " + ben + ", project " + project).isEqualTo(batch.get(ben));
+				}
+				if (project == null) {
+					assertThat(batch.get(OLD)).as("project-3 patient").isEmpty();
+					assertThat(batch.get(DONE)).extracting(PendingAction::purposeCodes)
+							.containsExactly(List.of("P-FAM", "P-REM", "P-RES", "P-SHR", "P-TRT"));
+				} else {
+					assertThat(batch.get(DONE)).as("project 3 applies to every patient")
+							.extracting(PendingAction::purposeCodes).containsExactly(List.of("P-REM", "P-TRT"));
+				}
+			}
+		}
+
+		@Test
+		@DisplayName("Feature 010: a page reads each notice and each project's notice once")
+		void projectLookupsAreShared() {
+			centralAsksSix();
+			projectNotice(PROJECT_NOTICE, "P-REG", "P-REM", "P-TRT");
+			eventOn("c-1", PROJECT_NOTICE, TestFixtures.NOW.minusSeconds(60));
+			eventOn("c-2", PROJECT_NOTICE, TestFixtures.NOW.minusSeconds(30));
+			when(decisions.findByBeneficiaryRegIdInAndCurrentTrue(List.of(OLD, DONE))).thenReturn(List.of(
+					row(OLD, "c-1", "P-REG", PurposeStatus.GRANTED), row(DONE, "c-2", "P-REG", PurposeStatus.GRANTED)));
+
+			service.pendingFor(List.of(OLD, DONE), NoticeContext.REGISTRATION, null);
+
+			verify(notices, times(1)).findFirstByContextAndProjectIdAndStatusAndDeletedFalseOrderByVersionNoDesc(
+					NoticeContext.REGISTRATION, PROJECT, NoticeStatus.PUBLISHED);
+			verify(noticePurposes, times(1)).findByNoticeVersionIdAndDeletedFalseOrderByDisplayRankAsc(
+					PROJECT_NOTICE);
+			verify(notices, times(1)).findById(PROJECT_NOTICE);
 		}
 
 		@Test
@@ -398,7 +576,7 @@ class PendingActionServiceImplTest {
 			when(consents.findByConsentIdIn(any())).thenThrow(new IllegalStateException("db down"));
 
 			org.assertj.core.api.Assertions.assertThatThrownBy(
-					() -> service.pendingFor(List.of(NONE, OLD, DONE), NoticeContext.REGISTRATION))
+					() -> service.pendingFor(List.of(NONE, OLD, DONE), NoticeContext.REGISTRATION, null))
 					.isInstanceOf(IllegalStateException.class);
 		}
 	}

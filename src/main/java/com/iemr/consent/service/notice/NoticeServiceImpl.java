@@ -127,6 +127,11 @@ public class NoticeServiceImpl implements NoticeService {
 						.map(t -> new PublishedNotice(n, t, purposesOf(n))));
 	}
 
+	@Override
+	public Optional<Notice> applicableNotice(NoticeContext context, Integer projectId) {
+		return project(context, projectId).or(() -> central(context));
+	}
+
 	private Optional<NoticeTranslation> translation(Long noticeVersionId, String languageCode) {
 		return translationRepository.findByNoticeVersionIdAndLanguageCodeAndDeletedFalse(noticeVersionId,
 				languageCode);

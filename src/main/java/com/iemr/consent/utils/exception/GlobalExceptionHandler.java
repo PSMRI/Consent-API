@@ -34,6 +34,7 @@ import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.jdbc.CannotGetJdbcConnectionException;
 import org.springframework.web.HttpMediaTypeNotSupportedException;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
+import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -105,8 +106,10 @@ public class GlobalExceptionHandler {
 		List<FieldErrorDetail> details = new ArrayList<>();
 		e.getAllValidationResults().forEach(result -> {
 			String parameter = result.getMethodParameter().getParameterName();
-			result.getResolvableErrors()
-					.forEach(error -> details.add(detail(parameter, error.getDefaultMessage())));
+			result.getResolvableErrors().forEach(error -> {
+				String name = error instanceof FieldError field ? field.getField() : parameter;
+				details.add(detail(name, error.getDefaultMessage()));
+			});
 		});
 		return validationFailed(request, details);
 	}

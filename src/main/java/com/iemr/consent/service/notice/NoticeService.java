@@ -25,6 +25,7 @@ package com.iemr.consent.service.notice;
 import java.util.List;
 import java.util.Optional;
 
+import com.iemr.consent.data.notice.Notice;
 import com.iemr.consent.data.notice.NoticeContext;
 import com.iemr.consent.model.notice.ActiveNotice;
 import com.iemr.consent.model.notice.NoticeLanguage;
@@ -46,4 +47,10 @@ public interface NoticeService {
 
 	/** A notice version for a save, only if it is still published and has this language. */
 	Optional<PublishedNotice> findPublished(Long noticeVersionId, String languageCode);
+
+	/**
+	 * The latest published notice of the project for the context, else the latest published central notice;
+	 * empty when neither exists. Same rule as the active notice, without a language (feature 010).
+	 */
+	Optional<Notice> applicableNotice(NoticeContext context, Integer projectId);
 }

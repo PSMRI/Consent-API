@@ -131,14 +131,30 @@ class PrincipalConsentControllerTest {
 	@Test
 	@DisplayName("H4: pending actions default to the registration notice; REVISIT is passed through")
 	void pendingActions() throws Exception {
-		when(pending.pending(1001L, NoticeContext.REGISTRATION))
+		when(pending.pending(1001L, NoticeContext.REGISTRATION, null))
 				.thenReturn(List.of(new PendingAction(PendingReason.CONSENT_MISSING, List.of("P-REG"), null)));
 		mvc.perform(get(BASE + "1001/pending-actions")).andExpect(status().isOk())
 				.andExpect(jsonPath("$.data[0].reason").value("CONSENT_MISSING"))
 				.andExpect(jsonPath("$.data[0].purposeCodes[0]").value("P-REG"));
 		mvc.perform(get(BASE + "1001/pending-actions").param("context", "REVISIT")).andExpect(status().isOk());
-		verify(pending).pending(1001L, NoticeContext.REVISIT);
+		verify(pending).pending(1001L, NoticeContext.REVISIT, null);
 		mvc.perform(get(BASE + "1001/pending-actions").param("context", "OTHER")).andExpect(status().isBadRequest());
+	}
+
+	@Test
+	@DisplayName("Feature 010: the caller's project is passed through")
+	void pendingActionsPassTheProject() throws Exception {
+		mvc.perform(get(BASE + "1001/pending-actions").param("projectId", "3")).andExpect(status().isOk());
+		verify(pending).pending(1001L, NoticeContext.REGISTRATION, 3);
+	}
+
+	@Test
+	@DisplayName("Feature 010, FR-008: a project ID that is not positive is refused")
+	void pendingActionsRefuseANonPositiveProject() throws Exception {
+		mvc.perform(get(BASE + "1001/pending-actions").param("projectId", "0")).andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.error.code").value("VALIDATION_FAILED"))
+				.andExpect(jsonPath("$.error.details[0].field").value("projectId"));
+		verify(pending, never()).pending(any(), any(), any());
 	}
 
 	@Test

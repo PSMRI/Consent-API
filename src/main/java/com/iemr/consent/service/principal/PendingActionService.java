@@ -33,11 +33,13 @@ import com.iemr.consent.model.principal.PendingAction;
 public interface PendingActionService {
 
 	/**
-	 * @param context which active notice defines the purposes needed
+	 * @param context   which notice context defines the purposes needed
+	 * @param projectId the project the caller works in, or null to use the project of the notice of the
+	 *                  patient's latest consent (feature 010)
 	 * @return actions in the order CONSENT_MISSING, LEGACY, RECONSENT_REQUIRED, GUARDIAN_TO_SELF; empty when
 	 *         nothing is needed (H3)
 	 */
-	List<PendingAction> pending(Long benRegId, NoticeContext context);
+	List<PendingAction> pending(Long benRegId, NoticeContext context, Integer projectId);
 
 	/**
 	 * API 15 (feature 007): API 9's answer for each patient, computed with the same rules.
@@ -45,5 +47,5 @@ public interface PendingActionService {
 	 * @param benRegIds distinct patient ids, 1 to 100 (checked by the caller)
 	 * @return one entry per id, in the given order; an empty list when nothing is needed
 	 */
-	Map<Long, List<PendingAction>> pendingFor(Collection<Long> benRegIds, NoticeContext context);
+	Map<Long, List<PendingAction>> pendingFor(Collection<Long> benRegIds, NoticeContext context, Integer projectId);
 }

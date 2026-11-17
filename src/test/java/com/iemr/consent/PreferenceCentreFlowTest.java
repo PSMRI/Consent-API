@@ -87,6 +87,8 @@ import com.iemr.consent.repository.evidence.ConsentEvidenceRepository;
 import com.iemr.consent.repository.grant.AccessGrantRepository;
 import com.iemr.consent.repository.notice.NoticePurposeRepository;
 import com.iemr.consent.repository.notice.NoticeRepository;
+import com.iemr.consent.repository.notice.NoticeTranslationRepository;
+import com.iemr.consent.service.notice.NoticeServiceImpl;
 import com.iemr.consent.repository.notice.PurposeRepository;
 import com.iemr.consent.service.audit.AuditLogServiceImpl;
 import com.iemr.consent.service.grant.AccessGrantServiceImpl;
@@ -131,7 +133,7 @@ import com.iemr.consent.utils.idempotency.RequestHasher;
 	PrincipalConsentServiceImpl.class, PendingActionServiceImpl.class, PreferenceChangeWriter.class,
 	WithdrawalWriter.class, PrincipalEventFactory.class, EffectiveStatus.class, ConsentViewMapper.class,
 	AccessGrantServiceImpl.class, AccessGrantWriter.class, GrantReplayStore.class, OtpServiceImpl.class,
-	AuditLogServiceImpl.class, PreferenceCentreFlowTest.SliceConfig.class })
+	AuditLogServiceImpl.class, NoticeServiceImpl.class, PreferenceCentreFlowTest.SliceConfig.class })
 class PreferenceCentreFlowTest {
 
 	private static final String WORKER = TestTokens.valid("42", "worker42", "jti-42");
@@ -170,6 +172,9 @@ class PreferenceCentreFlowTest {
 
 	@MockBean
 	private NoticePurposeRepository noticePurposeRepository;
+
+	@MockBean
+	private NoticeTranslationRepository noticeTranslationRepository;
 
 	@MockBean
 	private PurposeRepository purposeRepository;

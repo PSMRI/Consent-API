@@ -92,8 +92,8 @@ public class PrincipalConsentController {
 	@GetMapping("/pending-actions")
 	public ApiResponse<List<PendingAction>> pendingActions(@PathVariable @Positive Long benRegId,
 			@RequestParam(defaultValue = "REGISTRATION") NoticeContext context,
-			HttpServletRequest request) {
-		List<PendingAction> actions = pendingActionService.pending(benRegId, context);
+			@RequestParam(required = false) @Positive Integer projectId, HttpServletRequest request) {
+		List<PendingAction> actions = pendingActionService.pending(benRegId, context, projectId);
 		return ApiResponse.ok(actions, TraceIdFilter.currentTraceId(request), clock);
 	}
 

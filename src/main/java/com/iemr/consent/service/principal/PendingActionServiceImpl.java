@@ -27,7 +27,6 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
-import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -51,7 +50,6 @@ import com.iemr.consent.data.consent.PurposeStatus;
 import com.iemr.consent.data.notice.Notice;
 import com.iemr.consent.data.notice.NoticeContext;
 import com.iemr.consent.data.notice.NoticePurpose;
-import com.iemr.consent.data.notice.NoticeStatus;
 import com.iemr.consent.model.principal.PendingAction;
 import com.iemr.consent.model.principal.PendingReason;
 import com.iemr.consent.repository.consent.ConsentPurposeRepository;
@@ -59,12 +57,15 @@ import com.iemr.consent.repository.consent.ConsentRepository;
 import com.iemr.consent.repository.consent.GuardianLinkRepository;
 import com.iemr.consent.repository.notice.NoticePurposeRepository;
 import com.iemr.consent.repository.notice.NoticeRepository;
+import com.iemr.consent.service.notice.NoticeService;
 
 /**
  * Derives a patient's pending consent actions on each call (research R5); nothing is stored, so the answer
  * is right before the expiry, guardian and notice jobs exist.
  * <ul>
- * <li>CONSENT_MISSING: purposes of the active notice with no current decision (C4).</li>
+ * <li>CONSENT_MISSING: purposes of the notice that applies to the patient with no current decision (C4). That
+ * notice is the caller's project's, else that of the project of the notice of the patient's latest consent, else
+ * the central notice; a project without a published notice falls back to the central one (feature 010).</li>
  * <li>LEGACY: decisions from a pre-DPDP (legacy) event (C5).</li>
  * <li>RECONSENT_REQUIRED: decisions marked so, past their end date (C16), or taken on a notice that has a
  * newer published material version (C14).</li>
@@ -84,6 +85,8 @@ public class PendingActionServiceImpl implements PendingActionService {
 
 	private final NoticePurposeRepository noticePurposeRepository;
 
+	private final NoticeService noticeService;
+
 	private final GuardianLinkRepository guardianLinkRepository;
 
 	private final EffectiveStatus effectiveStatus;
@@ -92,12 +95,14 @@ public class PendingActionServiceImpl implements PendingActionService {
 
 	public PendingActionServiceImpl(ConsentPurposeRepository purposeRepository,
 			ConsentRepository consentRepository, NoticeRepository noticeRepository,
-			NoticePurposeRepository noticePurposeRepository, GuardianLinkRepository guardianLinkRepository,
+			NoticePurposeRepository noticePurposeRepository, NoticeService noticeService,
+			GuardianLinkRepository guardianLinkRepository,
 			EffectiveStatus effectiveStatus, Clock clock) {
 		this.purposeRepository = purposeRepository;
 		this.consentRepository = consentRepository;
 		this.noticeRepository = noticeRepository;
 		this.noticePurposeRepository = noticePurposeRepository;
+		this.noticeService = noticeService;
 		this.guardianLinkRepository = guardianLinkRepository;
 		this.effectiveStatus = effectiveStatus;
 		this.clock = clock;
@@ -105,9 +110,9 @@ public class PendingActionServiceImpl implements PendingActionService {
 
 	@Override
 	@Transactional(readOnly = true)
-	public List<PendingAction> pending(Long benRegId, NoticeContext context) {
+	public List<PendingAction> pending(Long benRegId, NoticeContext context, Integer projectId) {
 		List<ConsentPurpose> current = purposeRepository.findByBeneficiaryRegIdAndCurrentTrue(benRegId);
-		return evaluate(current, sources(current), context, new Lookups());
+		return evaluate(current, sources(current), context, projectId, new Lookups());
 	}
 
 	/**
@@ -116,7 +121,8 @@ public class PendingActionServiceImpl implements PendingActionService {
 	 */
 	@Override
 	@Transactional(readOnly = true)
-	public Map<Long, List<PendingAction>> pendingFor(Collection<Long> benRegIds, NoticeContext context) {
+	public Map<Long, List<PendingAction>> pendingFor(Collection<Long> benRegIds, NoticeContext context,
+			Integer projectId) {
 		List<ConsentPurpose> all = purposeRepository.findByBeneficiaryRegIdInAndCurrentTrue(benRegIds);
 		Map<Long, List<ConsentPurpose>> byPatient = all.stream()
 				.collect(Collectors.groupingBy(ConsentPurpose::getBeneficiaryRegId));
@@ -125,7 +131,7 @@ public class PendingActionServiceImpl implements PendingActionService {
 		Map<Long, List<PendingAction>> result = new LinkedHashMap<>();
 		for (Long benRegId : benRegIds) {
 			List<ConsentPurpose> rows = byPatient.getOrDefault(benRegId, List.of());
-			result.put(benRegId, evaluate(rows, sources, context, lookups));
+			result.put(benRegId, evaluate(rows, sources, context, projectId, lookups));
 		}
 		return result;
 	}
@@ -133,8 +139,10 @@ public class PendingActionServiceImpl implements PendingActionService {
 	/** Look-ups that do not depend on the patient, shared by every patient of one request. */
 	private static final class Lookups {
 
-		private final Map<NoticeContext, Optional<List<String>>> noticePurposes =
-				new EnumMap<>(NoticeContext.class);
+		/** Project (empty = central) → purposes of the notice that applies to it, for the request's context. */
+		private final Map<Optional<Integer>, Optional<List<String>>> applicablePurposes = new HashMap<>();
+
+		private final Map<Long, Optional<Notice>> notices = new HashMap<>();
 
 		private final Map<Long, Optional<Instant>> newerNotice = new HashMap<>();
 
@@ -153,9 +161,10 @@ public class PendingActionServiceImpl implements PendingActionService {
 
 	/** One patient's pending actions (API 9 rules). */
 	private List<PendingAction> evaluate(List<ConsentPurpose> current, Map<String, Consent> sources,
-			NoticeContext context, Lookups lookups) {
+			NoticeContext context, Integer projectId, Lookups lookups) {
 		List<PendingAction> actions = new ArrayList<>();
-		missing(context, current, lookups).ifPresent(actions::add);
+		Optional<Integer> project = project(projectId, current, sources, lookups);
+		missing(context, project, current, lookups).ifPresent(actions::add);
 		Map<String, Instant> legacy = new TreeMap<>();
 		Map<String, Instant> reconsent = new TreeMap<>();
 		Map<String, Instant> guardianEnded = new TreeMap<>();
@@ -164,7 +173,7 @@ public class PendingActionServiceImpl implements PendingActionService {
 			if (source.getEventType() == EventType.LEGACY) {
 				legacy.put(row.getPurposeCode(), source.getCapturedAt());
 			}
-			reconsentDue(row, source, lookups.newerNotice)
+			reconsentDue(row, source, lookups)
 					.ifPresent(due -> reconsent.put(row.getPurposeCode(), due));
 			lookups.linkEnds.computeIfAbsent(source.getConsentId(), id -> guardianEnd(source))
 					.ifPresent(end -> guardianEnded.put(row.getPurposeCode(), end));
@@ -175,10 +184,32 @@ public class PendingActionServiceImpl implements PendingActionService {
 		return actions;
 	}
 
-	/** CONSENT_MISSING for the active notice's purposes that have no current decision. */
-	private Optional<PendingAction> missing(NoticeContext context, List<ConsentPurpose> current, Lookups lookups) {
-		Optional<List<String>> noticeCodes = lookups.noticePurposes.computeIfAbsent(context,
-				this::activeNoticePurposes);
+	/**
+	 * The project whose notice applies: the caller's, else that of the notice of the patient's latest consent
+	 * (the newest source event; a newer event can only supersede older rows, so the latest is always a source).
+	 */
+	private Optional<Integer> project(Integer projectId, List<ConsentPurpose> current,
+			Map<String, Consent> sources, Lookups lookups) {
+		if (projectId != null) {
+			return Optional.of(projectId);
+		}
+		return current.stream().map(row -> sources.get(row.getConsentId()))
+				.max(Comparator.comparing(Consent::getServerReceivedAt)
+						.thenComparing(Consent::getConsentId))
+				.flatMap(latest -> notice(latest.getNoticeVersionId(), lookups))
+				.map(Notice::getProjectId);
+	}
+
+	private Optional<Notice> notice(Long noticeVersionId, Lookups lookups) {
+		return lookups.notices.computeIfAbsent(noticeVersionId, noticeRepository::findById);
+	}
+
+	/** CONSENT_MISSING for the applicable notice's purposes that have no current decision. */
+	private Optional<PendingAction> missing(NoticeContext context, Optional<Integer> project,
+			List<ConsentPurpose> current, Lookups lookups) {
+		Optional<List<String>> noticeCodes = lookups.applicablePurposes.computeIfAbsent(project,
+				p -> noticeService.applicableNotice(context, p.orElse(null))
+						.map(n -> codesOf(n.getNoticeVersionId())));
 		if (noticeCodes.isEmpty()) {
 			return Optional.empty();
 		}
@@ -189,14 +220,6 @@ public class PendingActionServiceImpl implements PendingActionService {
 				: Optional.of(new PendingAction(PendingReason.CONSENT_MISSING, codes, null));
 	}
 
-	/** The purposes of the active central notice of a context, or empty when there is none. */
-	private Optional<List<String>> activeNoticePurposes(NoticeContext context) {
-		Optional<Notice> notice = noticeRepository
-				.findFirstByContextAndProjectIdIsNullAndStatusAndDeletedFalseOrderByVersionNoDesc(
-						context, NoticeStatus.PUBLISHED);
-		return notice.map(n -> codesOf(n.getNoticeVersionId()));
-	}
-
 	private List<String> codesOf(Long noticeVersionId) {
 		return noticePurposeRepository
 				.findByNoticeVersionIdAndDeletedFalseOrderByDisplayRankAsc(noticeVersionId).stream()
@@ -204,8 +227,7 @@ public class PendingActionServiceImpl implements PendingActionService {
 	}
 
 	/** The date re-consent became due for a granted or denied decision, if it is due. */
-	private Optional<Instant> reconsentDue(ConsentPurpose row, Consent source,
-			Map<Long, Optional<Instant>> newerNotice) {
+	private Optional<Instant> reconsentDue(ConsentPurpose row, Consent source, Lookups lookups) {
 		PurposeStatus status = effectiveStatus.of(row);
 		if (status == PurposeStatus.EXPIRED) {
 			return Optional.of(row.getValidUntil());
@@ -216,11 +238,12 @@ public class PendingActionServiceImpl implements PendingActionService {
 		if (status == PurposeStatus.WITHDRAWN) {
 			return Optional.empty();
 		}
-		return newerNotice.computeIfAbsent(source.getNoticeVersionId(), this::newerMaterialPublishedAt);
+		return lookups.newerNotice.computeIfAbsent(source.getNoticeVersionId(),
+				id -> newerMaterialPublishedAt(id, lookups));
 	}
 
-	private Optional<Instant> newerMaterialPublishedAt(Long noticeVersionId) {
-		return noticeRepository.findById(noticeVersionId)
+	private Optional<Instant> newerMaterialPublishedAt(Long noticeVersionId, Lookups lookups) {
+		return notice(noticeVersionId, lookups)
 				.flatMap(n -> noticeRepository.findNewerMaterial(n.getNoticeCode(), n.getVersionNo())
 				.stream()
 						.findFirst())
