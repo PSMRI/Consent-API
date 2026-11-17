@@ -1,0 +1,23 @@
+name: Build On Pull Request
+on:
+  pull_request:
+    branches: [ "develop", "main" ]
+
+jobs:
+  Build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+
+      - name: Setup JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: 17
+          distribution: 'temurin'
+
+      - name: Build with Maven (checkstyle, tests, 99% coverage gate)
+        run: mvn clean install -DENV_VAR=ci
