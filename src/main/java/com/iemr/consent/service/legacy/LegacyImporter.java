@@ -59,6 +59,7 @@ import com.iemr.consent.repository.notice.NoticeTranslationRepository;
 import com.iemr.consent.repository.notice.PurposeRepository;
 import com.iemr.consent.service.audit.AuditLogService;
 import com.iemr.consent.service.consent.ConsentDecisionWriter;
+import com.iemr.consent.service.consent.ConsentIds;
 import com.iemr.consent.service.consent.ProofRows;
 import com.iemr.consent.utils.auth.AuthenticatedUser;
 import com.iemr.consent.utils.crypto.FieldEncryptor;
@@ -178,7 +179,8 @@ public class LegacyImporter {
 
 	private String store(LegacyBatch batch, LegacyRow row, Notice notice, String textHash,
 			Map<String, Purpose> masters, AuthenticatedUser user, String sourceIp, Instant now) {
-		Consent consent = consents.saveAndFlush(consent(batch, row, notice, textHash, user, now));
+		String consentId = ConsentIds.next(clock, consents::existsById);
+		Consent consent = consents.saveAndFlush(consent(consentId, batch, row, notice, textHash, user, now));
 		List<PurposeResult> results = new ArrayList<>();
 		for (String code : LegacyRowChecker.codes(row.getPurposes())) {
 			results.add(decisionWriter.write(consent, code, Decision.GRANT, masters.get(code)));
@@ -196,11 +198,11 @@ public class LegacyImporter {
 		return consent.getConsentId();
 	}
 
-	private static Consent consent(LegacyBatch batch, LegacyRow row, Notice notice, String textHash,
-			AuthenticatedUser user, Instant now) {
+	private static Consent consent(String consentId, LegacyBatch batch, LegacyRow row, Notice notice,
+			String textHash, AuthenticatedUser user, Instant now) {
 		String reference = batch.getBatchId() + ":" + row.getRowNo();
 		Consent consent = new Consent();
-		consent.setConsentId(UUID.randomUUID().toString());
+		consent.setConsentId(consentId);
 		consent.setBeneficiaryRegId(row.getBeneficiaryRegId());
 		consent.setEventType(EventType.LEGACY);
 		consent.setConsentingParty(ConsentingParty.SELF);

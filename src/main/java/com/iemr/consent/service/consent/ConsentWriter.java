@@ -28,7 +28,6 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -118,7 +117,7 @@ public class ConsentWriter {
 			AuthenticatedUser user) {
 		Instant now = clock.instant();
 		Consent consent = new Consent();
-		consent.setConsentId(UUID.randomUUID().toString());
+		consent.setConsentId(ConsentIds.next(clock, consentRepository::existsById));
 		consent.setBeneficiaryRegId(request.beneficiaryRegId());
 		consent.setCreatedBy(user.auditName());
 		consent.setEventType(request.eventType());

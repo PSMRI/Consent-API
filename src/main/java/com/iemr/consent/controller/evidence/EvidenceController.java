@@ -46,6 +46,7 @@ import org.springframework.web.multipart.MultipartFile;
 import com.iemr.consent.data.evidence.EvidenceType;
 import com.iemr.consent.model.evidence.EvidenceUploadResult;
 import com.iemr.consent.model.evidence.EvidenceView;
+import com.iemr.consent.service.consent.ConsentIds;
 import com.iemr.consent.service.evidence.EvidenceAccessService;
 import com.iemr.consent.service.evidence.EvidenceFile;
 import com.iemr.consent.service.evidence.EvidenceService;
@@ -102,8 +103,8 @@ public class EvidenceController {
 	@GetMapping
 	public ApiResponse<List<EvidenceView>> list(@RequestParam("consentId") String consentId,
 			@CurrentUser AuthenticatedUser user, HttpServletRequest request) {
-		return ApiResponse.ok(accessService.listForConsent(uuid(consentId)), TraceIdFilter.currentTraceId(request),
-				clock);
+		List<EvidenceView> files = accessService.listForConsent(consentId(consentId));
+		return ApiResponse.ok(files, TraceIdFilter.currentTraceId(request), clock);
 	}
 
 	@Operation(summary = "Play (inline) or download a proof file of a saved consent; every call is audited")
@@ -121,7 +122,16 @@ public class EvidenceController {
 				.cacheControl(CacheControl.noStore()).body(file.content());
 	}
 
-	/** Ids are UUIDs; anything else cannot exist. */
+	/** Consent ids are short ids or, for older consents, UUIDs ({@link ConsentIds}); nothing else can exist. */
+	private static String consentId(String id) {
+		String stored = ConsentIds.normalise(id);
+		if (stored == null) {
+			throw new ConsentApiException(ErrorCode.NOT_FOUND);
+		}
+		return stored;
+	}
+
+	/** Evidence ids are UUIDs; anything else cannot exist. */
 	private static String uuid(String id) {
 		try {
 			return UUID.fromString(id).toString();

@@ -94,6 +94,7 @@ import com.iemr.consent.repository.notice.PurposeRepository;
 import com.iemr.consent.service.audit.AuditLogServiceImpl;
 import com.iemr.consent.service.consent.ConsentServiceImpl;
 import com.iemr.consent.service.consent.ConsentDecisionWriter;
+import com.iemr.consent.service.consent.ConsentDetailService;
 import com.iemr.consent.service.consent.ConsentValidator;
 import com.iemr.consent.service.consent.ConsentWriter;
 import com.iemr.consent.repository.notify.ConsentNotificationRepository;
@@ -177,6 +178,9 @@ class CaptureFlowTest {
 
 	@MockBean
 	private TokenDenylist tokenDenylist;
+
+	@MockBean
+	private ConsentDetailService consentDetailService;
 
 	@MockBean
 	private StringRedisTemplate stringRedisTemplate;

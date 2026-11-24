@@ -31,7 +31,6 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.TreeSet;
-import java.util.UUID;
 
 import org.springframework.stereotype.Component;
 
@@ -49,6 +48,7 @@ import com.iemr.consent.model.principal.PrincipalChange;
 import com.iemr.consent.repository.consent.ConsentPurposeRepository;
 import com.iemr.consent.repository.consent.ConsentRepository;
 import com.iemr.consent.repository.consent.GuardianLinkRepository;
+import com.iemr.consent.service.consent.ConsentIds;
 import com.iemr.consent.utils.auth.AuthenticatedUser;
 import com.iemr.consent.utils.crypto.FieldEncryptor;
 import com.iemr.consent.utils.crypto.Sha256;
@@ -147,7 +147,7 @@ public class PrincipalEventFactory {
 			PrincipalChange change, String requestKey, String requestHash, AuthenticatedUser user) {
 		Instant now = clock.instant();
 		Consent event = new Consent();
-		event.setConsentId(UUID.randomUUID().toString());
+		event.setConsentId(ConsentIds.next(clock, consentRepository::existsById));
 		event.setBeneficiaryRegId(benRegId);
 		event.setEventType(type);
 		event.setConsentingParty(party);

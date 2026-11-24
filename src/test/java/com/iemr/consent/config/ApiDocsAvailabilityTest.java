@@ -155,6 +155,7 @@ class ApiDocsAvailabilityTest {
 					"/consent/v1/notices/active/languages", "/consent/v1/otp/challenges",
 					"/consent/v1/otp/challenges/{challengeId}/verify", "/consent/v1/evidence",
 					"/consent/v1/evidence/{evidenceId}/content", "/consent/v1/consents",
+					"/consent/v1/consents/{consentId}",
 					"/consent/v1/principals/{benRegId}/consents", "/consent/v1/principals/{benRegId}/pending-actions",
 					"/consent/v1/principals/{benRegId}/preferences", "/consent/v1/principals/{benRegId}/withdrawals",
 					"/consent/v1/principals/pending-actions/batch",

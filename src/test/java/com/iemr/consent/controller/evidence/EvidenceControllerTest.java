@@ -145,6 +145,14 @@ class EvidenceControllerTest {
 	}
 
 	@Test
+	void listsTheFilesOfAShortConsentId() throws Exception {
+		when(access.listForConsent("26112448271")).thenReturn(List.of());
+		mvc.perform(get("/consent/v1/evidence").param("consentId", "26112448271")
+				.requestAttr(AuthenticatedUser.ATTRIBUTE, ConsentFixtures.WORKER))
+				.andExpect(status().isOk()).andExpect(jsonPath("$.data").isEmpty());
+	}
+
+	@Test
 	void playsInlineOrDownloads() throws Exception {
 		EvidenceFile file = new EvidenceFile("consent-evidence-e1.webm", "audio/webm", "abc".getBytes());
 		when(access.open(eq(ID), eq(false), eq(ConsentFixtures.WORKER), any())).thenReturn(file);

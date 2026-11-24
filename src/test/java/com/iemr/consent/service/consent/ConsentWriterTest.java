@@ -215,6 +215,7 @@ class ConsentWriterTest {
 		write(ConsentFixtures.request().build());
 		assertThat(savedConsent().getCreatedBy()).isEqualTo(ConsentFixtures.WORKER.auditName());
 		assertThat(savedConsent().isDeleted()).isFalse();
+		assertThat(savedConsent().getConsentId()).matches("^261029[0-9]{5}$");
 	}
 
 	@Test

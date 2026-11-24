@@ -29,6 +29,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -42,11 +43,18 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
+import com.iemr.consent.data.consent.Channel;
+import com.iemr.consent.data.consent.ConsentMode;
+import com.iemr.consent.data.consent.ConsentingParty;
+import com.iemr.consent.data.consent.Decision;
+import com.iemr.consent.data.consent.EventType;
 import com.iemr.consent.data.consent.PurposeStatus;
 import com.iemr.consent.data.consent.SyncStatus;
+import com.iemr.consent.model.consent.ConsentDetail;
 import com.iemr.consent.model.consent.NotificationResult;
 import com.iemr.consent.model.consent.PurposeResult;
 import com.iemr.consent.model.consent.SaveConsentResult;
+import com.iemr.consent.service.consent.ConsentDetailService;
 import com.iemr.consent.service.consent.ConsentService;
 import com.iemr.consent.support.ConsentFixtures;
 import com.iemr.consent.support.TestFixtures;
@@ -71,14 +79,17 @@ class ConsentControllerTest {
 
 	private ConsentService service;
 
+	private ConsentDetailService detailService;
+
 	private MockMvc mvc;
 
 	@BeforeEach
 	void setUp() {
 		service = mock(ConsentService.class);
+		detailService = mock(ConsentDetailService.class);
 		mvc = MockMvcBuilders
-				.standaloneSetup(new ConsentController(service, new RequestHasher(TestFixtures.objectMapper()),
-						TestFixtures.CLOCK))
+				.standaloneSetup(new ConsentController(service, detailService,
+						new RequestHasher(TestFixtures.objectMapper()), TestFixtures.CLOCK))
 				.setControllerAdvice(new GlobalExceptionHandler(new ErrorResponseWriter(TestFixtures.objectMapper(),
 						TestFixtures.CLOCK, TestFixtures.consentProperties())))
 				.setCustomArgumentResolvers(new CurrentUserArgumentResolver()).addFilters(new TraceIdFilter()).build();
@@ -132,5 +143,28 @@ class ConsentControllerTest {
 
 		mvc.perform(save(BODY).header("Idempotency-Key", KEY)).andExpect(status().isConflict())
 				.andExpect(jsonPath("$.error.code").value("STALE_VERSION"));
+	}
+
+	@Test
+	void oneConsentByItsId() throws Exception {
+		ConsentDetail detail = new ConsentDetail("26102948271", 1001L, EventType.NEW, ConsentingParty.SELF,
+				Channel.FACILITY, ConsentMode.SELF_READ, "hi", "a".repeat(64), null, null,
+				List.of(new ConsentDetail.PurposeDecision("P-REG", "Registration", null, null, true, false,
+						Decision.GRANT, PurposeStatus.GRANTED, 1, true, null)),
+				null, List.of(), NotificationResult.notRequested());
+		when(detailService.detail(eq("26102948271"), eq(ConsentFixtures.WORKER), anyString())).thenReturn(detail);
+
+		mvc.perform(get("/consent/v1/consents/26102948271").requestAttr(AuthenticatedUser.ATTRIBUTE,
+				ConsentFixtures.WORKER)).andExpect(status().isOk())
+				.andExpect(jsonPath("$.data.beneficiaryRegId").value(1001))
+				.andExpect(jsonPath("$.data.purposes[0].purposeCode").value("P-REG"))
+				.andExpect(jsonPath("$.data.purposes[0].isMandatory").value(true));
+	}
+
+	@Test
+	void unknownConsentIs404() throws Exception {
+		when(detailService.detail(eq("x"), any(), anyString())).thenThrow(new ConsentApiException(ErrorCode.NOT_FOUND));
+		mvc.perform(get("/consent/v1/consents/x").requestAttr(AuthenticatedUser.ATTRIBUTE, ConsentFixtures.WORKER))
+				.andExpect(status().isNotFound()).andExpect(jsonPath("$.error.code").value("NOT_FOUND"));
 	}
 }

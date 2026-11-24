@@ -59,6 +59,12 @@ public interface AuditLogService {
 	String EVIDENCE_ACCESSED = "EVIDENCE_ACCESSED";
 
 	/**
+	 * Audit action for a consent read in full (API 17). Summary {@code P-REG:GRANTED,…}, status VIEWED; no
+	 * personal data.
+	 */
+	String CONSENT_VIEWED = "CONSENT_VIEWED";
+
+	/**
 	 * Audit action for a published notice (feature 006). Its {@code consentId} is null and its purpose summary is
 	 * {@code notice:<id>;project:<id>;context:<ctx>;v:<n>;langs:<codes>;material:<bool>}; no notice text.
 	 */
