@@ -58,6 +58,7 @@ import com.iemr.consent.repository.notice.PurposeRepository;
 import com.iemr.consent.support.ConsentFixtures;
 import com.iemr.consent.support.PrincipalFixtures;
 import com.iemr.consent.support.TestFixtures;
+import com.iemr.consent.utils.crypto.FieldEncryptor;
 import com.iemr.consent.utils.exception.ConsentApiException;
 import com.iemr.consent.utils.exception.ErrorCode;
 
@@ -94,7 +95,8 @@ class PrincipalConsentServiceImplTest {
 		when(purposes.findByPurposeCodeInAndActiveTrueAndDeletedFalse(any())).thenReturn(ConsentFixtures.purposes());
 		when(consents.findByCapturedByAndRequestKey(42L, KEY)).thenReturn(Optional.empty());
 		service = new PrincipalConsentServiceImpl(consents, decisions, purposes,
-				new ConsentViewMapper(new EffectiveStatus(TestFixtures.CLOCK)), preferenceWriter, withdrawalWriter);
+				new ConsentViewMapper(new EffectiveStatus(TestFixtures.CLOCK),
+				new FieldEncryptor(TestFixtures.consentProperties())), preferenceWriter, withdrawalWriter);
 	}
 
 	private void stored() {
@@ -180,18 +182,18 @@ class PrincipalConsentServiceImplTest {
 	}
 
 	@Test
-	@DisplayName("C11: ALL reports the granted purposes it could not withdraw; named purposes report none")
+	@DisplayName("C11: every granted purpose can be withdrawn, so notWithdrawn is always empty")
 	void withdrawalReportsWhatAllLeftUnchanged() {
 		stored();
 		WithdrawalRequest all = new WithdrawalRequest(PurposeSelection.everything(), Map.of(), null, null, null,
-				null);
+				null, null, null);
 		WithdrawalResult result = service.withdraw(BEN, all, KEY, "hash-1", ConsentFixtures.WORKER, IP);
 		verify(withdrawalWriter).write(BEN, all, KEY, "hash-1", ConsentFixtures.WORKER, IP);
-		assertThat(result.notWithdrawn()).containsExactly("P-REG");
+		assertThat(result.notWithdrawn()).isEmpty();
 		assertThat(result.history()).hasSize(2);
 
 		WithdrawalRequest named = new WithdrawalRequest(PurposeSelection.of(List.of("P-REM")), Map.of("P-REM", 2),
-				null, null, null, null);
+				null, null, null, null, null, null);
 		assertThat(service.withdraw(BEN, named, "key-2", "hash-2", ConsentFixtures.WORKER, IP).notWithdrawn())
 				.isEmpty();
 	}

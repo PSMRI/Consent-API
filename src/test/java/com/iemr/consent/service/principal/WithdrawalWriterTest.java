@@ -52,14 +52,12 @@ import com.iemr.consent.data.consent.GuardianLink;
 import com.iemr.consent.data.consent.PurposeStatus;
 import com.iemr.consent.data.grant.AccessGrant;
 import com.iemr.consent.data.grant.GrantStatus;
-import com.iemr.consent.data.notice.Purpose;
 import com.iemr.consent.model.principal.PurposeSelection;
 import com.iemr.consent.model.principal.WithdrawalRequest;
 import com.iemr.consent.repository.consent.ConsentPurposeRepository;
 import com.iemr.consent.repository.consent.ConsentRepository;
 import com.iemr.consent.repository.consent.GuardianLinkRepository;
 import com.iemr.consent.repository.grant.AccessGrantRepository;
-import com.iemr.consent.repository.notice.PurposeRepository;
 import com.iemr.consent.service.audit.AuditLogService;
 import com.iemr.consent.service.grant.AccessGrantService;
 import com.iemr.consent.support.ConsentFixtures;
@@ -101,10 +99,6 @@ class WithdrawalWriterTest {
 		grants = mock(AccessGrantRepository.class);
 		grantService = mock(AccessGrantService.class);
 		audit = mock(AuditLogService.class);
-		PurposeRepository purposes = mock(PurposeRepository.class);
-		List<Purpose> catalogue = new ArrayList<>(ConsentFixtures.purposes());
-		catalogue.add(ConsentFixtures.purpose("P-FAM", false, null, 1));
-		when(purposes.findByPurposeCodeInAndActiveTrueAndDeletedFalse(any())).thenReturn(catalogue);
 		when(consents.saveAndFlush(any())).thenAnswer(i -> i.getArgument(0));
 		when(consents.findByConsentIdIn(any())).thenReturn(List.of(source));
 		when(decisions.save(any())).thenAnswer(i -> {
@@ -114,7 +108,7 @@ class WithdrawalWriterTest {
 		EffectiveStatus status = new EffectiveStatus(TestFixtures.CLOCK);
 		PrincipalEventFactory events = new PrincipalEventFactory(consents, decisions, links,
 				new FieldEncryptor(TestFixtures.consentProperties()), TestFixtures.CLOCK);
-		writer = new WithdrawalWriter(decisions, purposes, grants, grantService, events, status, audit);
+		writer = new WithdrawalWriter(decisions, grants, grantService, events, status, audit);
 	}
 
 	private void current(ConsentPurpose... rows) {
@@ -125,7 +119,7 @@ class WithdrawalWriterTest {
 	}
 
 	private static WithdrawalRequest named(Map<String, Integer> versions, String... codes) {
-		return new WithdrawalRequest(PurposeSelection.of(List.of(codes)), versions, null, null, null, null);
+		return new WithdrawalRequest(PurposeSelection.of(List.of(codes)), versions, null, null, null, null, null, null);
 	}
 
 	private void write(WithdrawalRequest request) {
@@ -169,18 +163,18 @@ class WithdrawalWriterTest {
 	}
 
 	@Test
-	@DisplayName("C12: a purpose that cannot be withdrawn refuses the whole request")
-	void refusesAPurposeThatCannotBeWithdrawn() {
+	@DisplayName("C12: a mandatory purpose can be withdrawn with the others")
+	void mandatoryPurposesCanBeWithdrawn() {
 		current(PrincipalFixtures.row("c-1", "P-REG", PurposeStatus.GRANTED, 1, null),
-				PrincipalFixtures.row("c-1", "P-REM", PurposeStatus.GRANTED, 1, null));
-		assertRefused(named(Map.of("P-REG", 1, "P-REM", 1), "P-REG", "P-REM"), ErrorCode.PURPOSE_NOT_WITHDRAWABLE,
-				"P-REG");
-	}
+				PrincipalFixtures.row("c-1", "P-TRT", PurposeStatus.GRANTED, 1, null));
 
-	@Test
-	void aPurposeMissingFromTheCatalogueCannotBeWithdrawn() {
-		current(PrincipalFixtures.row("c-1", "P-OLD", PurposeStatus.GRANTED, 1, null));
-		assertRefused(named(Map.of("P-OLD", 1), "P-OLD"), ErrorCode.PURPOSE_NOT_WITHDRAWABLE, "P-OLD");
+		write(named(Map.of("P-REG", 1, "P-TRT", 1), "P-REG", "P-TRT"));
+
+		assertThat(saved).extracting(ConsentPurpose::getPurposeCode, ConsentPurpose::getStatus).containsExactly(
+				org.assertj.core.groups.Tuple.tuple("P-REG", PurposeStatus.WITHDRAWN),
+				org.assertj.core.groups.Tuple.tuple("P-TRT", PurposeStatus.WITHDRAWN));
+		verify(audit).append(eq(AuditLogService.CONSENT_WITHDRAWN), anyString(), eq(BEN),
+				eq("P-REG:WITHDRAWN,P-TRT:WITHDRAWN"), eq("WITHDRAWN"), eq(42L), eq(IP));
 	}
 
 	@Test
@@ -210,27 +204,28 @@ class WithdrawalWriterTest {
 	}
 
 	@Test
-	@DisplayName("C11: ALL withdraws every granted purpose that can be withdrawn and nothing else")
-	void allWithdrawsOnlyGrantedWithdrawablePurposes() {
+	@DisplayName("C11: ALL withdraws every granted purpose, mandatory ones included, and nothing else")
+	void allWithdrawsEveryGrantedPurpose() {
 		current(PrincipalFixtures.row("c-1", "P-REG", PurposeStatus.GRANTED, 1, null),
 				PrincipalFixtures.row("c-1", "P-REM", PurposeStatus.GRANTED, 2, null),
 				PrincipalFixtures.row("c-1", "P-FAM", PurposeStatus.DENIED, 1, null));
 
-		write(new WithdrawalRequest(PurposeSelection.everything(), Map.of("P-REM", 2), null, null, null, null));
+		write(new WithdrawalRequest(PurposeSelection.everything(), Map.of("P-REG", 1, "P-REM", 2), null, null, null,
+				null, null, null));
 
-		assertThat(saved).extracting(ConsentPurpose::getPurposeCode).containsExactly("P-REM");
-		verify(grantService).revokeForWithdrawal(List.of(), Set.of("P-REM"), ConsentFixtures.WORKER, IP);
+		assertThat(saved).extracting(ConsentPurpose::getPurposeCode).containsExactly("P-REG", "P-REM");
+		verify(grantService).revokeForWithdrawal(List.of(), Set.of("P-REG", "P-REM"), ConsentFixtures.WORKER, IP);
 	}
 
 	@Test
 	void allNeedsTheVersionOfEveryPurposeItWithdrawsAndSomethingToWithdraw() {
 		current(PrincipalFixtures.row("c-1", "P-REM", PurposeStatus.GRANTED, 2, null));
-		assertRefused(new WithdrawalRequest(PurposeSelection.everything(), Map.of(), null, null, null, null),
+		assertRefused(new WithdrawalRequest(PurposeSelection.everything(), Map.of(), null, null, null, null, null, null),
 				ErrorCode.STALE_VERSION, null);
 
-		current(PrincipalFixtures.row("c-1", "P-REG", PurposeStatus.GRANTED, 1, null),
+		current(PrincipalFixtures.row("c-1", "P-REG", PurposeStatus.DENIED, 1, null),
 				PrincipalFixtures.row("c-1", "P-REM", PurposeStatus.WITHDRAWN, 3, null));
-		assertRefused(new WithdrawalRequest(PurposeSelection.everything(), Map.of(), null, null, null, null),
+		assertRefused(new WithdrawalRequest(PurposeSelection.everything(), Map.of(), null, null, null, null, null, null),
 				ErrorCode.STATE_CONFLICT, null);
 	}
 

@@ -125,4 +125,12 @@ public class Consent extends AuditColumns {
 
 	@Column(name = "request_hash")
 	private String requestHash;
+
+	/** WITHDRAWAL events: the reason code chosen (V39); null on other events. */
+	@Column(name = "withdrawal_reason")
+	private String withdrawalReason;
+
+	/** WITHDRAWAL events: the remarks, encrypted with {@code FieldEncryptor} (V39); null when none. */
+	@Column(name = "withdrawal_remarks")
+	private String withdrawalRemarksEncrypted;
 }

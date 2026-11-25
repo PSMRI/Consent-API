@@ -38,17 +38,27 @@ import jakarta.validation.constraints.Size;
  *
  * @param purposeCodes the purposes, or {@code "ALL"}
  * @param versions     version last seen per purpose; must cover every purpose that will change
+ * @param reason       optional reason code chosen by the user, for example {@code PATIENT_REQUEST}
+ * @param remarks      optional free-text remarks; stored encrypted
  */
 public record WithdrawalRequest(@NotNull PurposeSelection purposeCodes,
 		@NotNull Map<@NotNull String, @NotNull @Min(1) Integer> versions,
 		@Size(max = 100) @Pattern(regexp = ConsentPatterns.CODE) String deviceId, Integer facilityId,
 		Integer providerServiceMapId,
-				@Size(max = 30) @Pattern(regexp = ConsentPatterns.CODE) String serviceLine)
+		@Size(max = 30) @Pattern(regexp = ConsentPatterns.CODE) String serviceLine,
+		@Size(max = 50) @Pattern(regexp = ConsentPatterns.CODE) String reason,
+		@Size(max = 500) String remarks)
 		implements PrincipalChange {
 
 	@JsonIgnore
 	@AssertTrue(message = "must be \"ALL\" or 1 to 50 unique purpose codes")
 	public boolean isPurposeCodesValid() {
 		return purposeCodes == null || purposeCodes.all() || PurposeCodes.valid(purposeCodes.codes(), 50);
+	}
+
+	/** Leaves out the remarks, which may hold personal data. */
+	@Override
+	public String toString() {
+		return "WithdrawalRequest[purposeCodes=" + purposeCodes + ", reason=" + reason + "]";
 	}
 }

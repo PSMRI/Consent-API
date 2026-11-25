@@ -121,7 +121,7 @@ public class PreferenceChangeWriter {
 		if (grant) {
 			checkGrantable(rows);
 		} else {
-			checkDeniable(rows, byCode);
+			checkDeniable(rows);
 		}
 		Consent source = events.newestSource(rows.values());
 		ConsentingParty party = events.partyFor(source);
@@ -164,18 +164,12 @@ public class PreferenceChangeWriter {
 		}
 	}
 
-	/** DENY: not already denied, and a granted purpose must be one that can be withdrawn. */
-	private void checkDeniable(Map<String, ConsentPurpose> rows, Map<String, Purpose> byCode) {
+	/** DENY: not already denied. Any granted purpose can be turned off, mandatory ones included. */
+	private void checkDeniable(Map<String, ConsentPurpose> rows) {
 		for (ConsentPurpose row : rows.values()) {
-			PurposeStatus status = effectiveStatus.of(row);
-			if (status == PurposeStatus.DENIED) {
+			if (effectiveStatus.of(row) == PurposeStatus.DENIED) {
 				throw new ConsentApiException(ErrorCode.STATE_CONFLICT,
 						"This purpose is already denied",
-						row.getPurposeCode(), null);
-			}
-			Purpose purpose = byCode.get(row.getPurposeCode());
-			if (status == PurposeStatus.GRANTED && (purpose == null || !purpose.isWithdrawable())) {
-				throw new ConsentApiException(ErrorCode.PURPOSE_NOT_WITHDRAWABLE, null,
 						row.getPurposeCode(), null);
 			}
 		}

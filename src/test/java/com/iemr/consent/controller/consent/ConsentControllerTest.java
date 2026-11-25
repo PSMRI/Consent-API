@@ -151,7 +151,7 @@ class ConsentControllerTest {
 				Channel.FACILITY, ConsentMode.SELF_READ, "hi", "a".repeat(64), null, null,
 				List.of(new ConsentDetail.PurposeDecision("P-REG", "Registration", null, null, true, false,
 						Decision.GRANT, PurposeStatus.GRANTED, 1, true, null)),
-				null, List.of(), NotificationResult.notRequested());
+				null, List.of(), NotificationResult.notRequested(), null);
 		when(detailService.detail(eq("26102948271"), eq(ConsentFixtures.WORKER), anyString())).thenReturn(detail);
 
 		mvc.perform(get("/consent/v1/consents/26102948271").requestAttr(AuthenticatedUser.ATTRIBUTE,

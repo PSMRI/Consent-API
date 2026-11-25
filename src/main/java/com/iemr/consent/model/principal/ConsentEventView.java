@@ -31,11 +31,14 @@ import com.iemr.consent.data.consent.EventType;
 import com.iemr.consent.data.consent.PurposeStatus;
 import com.iemr.consent.data.consent.SyncStatus;
 
-/** One consent event in a patient's history (API 8 {@code history[]}). */
+/**
+ * One consent event in a patient's history (API 8 {@code history[]}). {@code withdrawalReason} and
+ * {@code withdrawalRemarks} (decrypted) are set only on WITHDRAWAL events that carried them.
+ */
 public record ConsentEventView(String consentId, EventType eventType, ConsentingParty consentingParty,
 		Long noticeVersionId, String languageCode, ConsentMode mode, Long capturedBy, Instant capturedAt,
 		Integer facilityId, String serviceLine, String deviceId, SyncStatus syncStatus,
-		List<PurposeOutcome> purposes) {
+		List<PurposeOutcome> purposes, String withdrawalReason, String withdrawalRemarks) {
 
 	/** The outcome for one purpose within the event, as stored. */
 	public record PurposeOutcome(String purposeCode, PurposeStatus status, Integer versionNo) {

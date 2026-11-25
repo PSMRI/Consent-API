@@ -58,11 +58,16 @@ import com.iemr.consent.data.notice.NoticeContext;
  * @param guardian         the representative; null when the patient consented
  * @param proofs           all proof rows (files, OTP, witness, declaration), oldest first
  * @param notification     the confirmation SMS
+ * @param withdrawal       why it was withdrawn; null unless this is a WITHDRAWAL event
  */
 public record ConsentDetail(String consentId, Long beneficiaryRegId, EventType eventType,
 		ConsentingParty consentingParty, Channel channel, ConsentMode mode, String languageCode,
 		String textHash, Capture capture, NoticeShown notice, List<PurposeDecision> purposes, Guardian guardian,
-		List<Proof> proofs, NotificationResult notification) {
+		List<Proof> proofs, NotificationResult notification, Withdrawal withdrawal) {
+
+	/** Why the patient withdrew: the reason code chosen and the remarks (decrypted). */
+	public record Withdrawal(String reason, String remarks) {
+	}
 
 	/** Who captured the consent, when and where. */
 	public record Capture(Long capturedBy, Instant capturedAt, Instant serverReceivedAt,

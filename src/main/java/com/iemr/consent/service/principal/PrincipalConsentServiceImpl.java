@@ -31,9 +31,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.iemr.consent.data.consent.Consent;
 import com.iemr.consent.data.consent.ConsentPurpose;
-import com.iemr.consent.data.consent.PurposeStatus;
 import com.iemr.consent.data.notice.Purpose;
-import com.iemr.consent.model.principal.CurrentDecisionView;
 import com.iemr.consent.model.principal.PatientConsents;
 import com.iemr.consent.model.principal.PreferenceRequest;
 import com.iemr.consent.model.principal.WithdrawalRequest;
@@ -111,9 +109,7 @@ public class PrincipalConsentServiceImpl implements PrincipalConsentService {
 				() -> withdrawalWriter.write(benRegId, request, requestKey, requestHash, user,
 						sourceIp));
 		PatientConsents consents = consents(benRegId);
-		List<String> notWithdrawn = request.purposeCodes().all() ? notWithdrawable(consents.current())
-				: List.of();
-		return new WithdrawalResult(consents.current(), consents.history(), notWithdrawn);
+		return new WithdrawalResult(consents.current(), consents.history(), List.of());
 	}
 
 	/** Runs the write unless this user already used the key; a repeat must be the same request. */
@@ -137,11 +133,5 @@ public class PrincipalConsentServiceImpl implements PrincipalConsentService {
 		if (!consent.getRequestHash().equals(requestHash)) {
 			throw new ConsentApiException(ErrorCode.STATE_CONFLICT);
 		}
-	}
-
-	/** Granted purposes that cannot be withdrawn: what {@code ALL} leaves unchanged. */
-	private static List<String> notWithdrawable(List<CurrentDecisionView> current) {
-		return current.stream().filter(d -> d.status() == PurposeStatus.GRANTED && !d.isWithdrawable())
-				.map(CurrentDecisionView::purposeCode).toList();
 	}
 }

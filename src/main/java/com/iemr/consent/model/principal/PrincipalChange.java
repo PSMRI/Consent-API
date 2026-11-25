@@ -37,4 +37,14 @@ public interface PrincipalChange {
 	Integer providerServiceMapId();
 
 	String serviceLine();
+
+	/** @return the withdrawal reason code; only a withdrawal has one */
+	default String reason() {
+		return null;
+	}
+
+	/** @return the withdrawal remarks, plain; only a withdrawal has them */
+	default String remarks() {
+		return null;
+	}
 }

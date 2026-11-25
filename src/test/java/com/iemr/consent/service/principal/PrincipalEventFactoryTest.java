@@ -176,7 +176,7 @@ class PrincipalEventFactoryTest {
 	void saveEventCopiesTheSourceNoticeAndUsesServerTime() {
 		Consent source = PrincipalFixtures.event("c-1", TestFixtures.NOW.minusSeconds(3600));
 		WithdrawalRequest change = new WithdrawalRequest(PurposeSelection.of(List.of("P-REM")), Map.of("P-REM", 1),
-				null, 7, 8, "HWC");
+				null, 7, 8, "HWC", null, null);
 
 		Consent event = factory.saveEvent(BEN, EventType.WITHDRAWAL, null, source, ConsentingParty.SELF, change,
 				"key-1", "hash-1", ConsentFixtures.WORKER);
@@ -199,11 +199,33 @@ class PrincipalEventFactoryTest {
 		assertThat(event.getRequestKey()).isEqualTo("key-1");
 		assertThat(event.getRequestHash()).isEqualTo("hash-1");
 		assertThat(event.getCreatedBy()).isEqualTo(ConsentFixtures.WORKER.auditName());
+		assertThat(event.getWithdrawalReason()).isNull();
+		assertThat(event.getWithdrawalRemarksEncrypted()).isNull();
 
 		WithdrawalRequest withDevice = new WithdrawalRequest(PurposeSelection.everything(), Map.of(), "tab-3", null,
-				null, null);
+				null, null, null, null);
 		assertThat(factory.saveEvent(BEN, EventType.UPDATE, ConsentMode.OTP, source, ConsentingParty.GUARDIAN,
 				withDevice, "key-2", "hash-2", ConsentFixtures.WORKER).getDeviceId()).isEqualTo("tab-3");
+	}
+
+	@Test
+	@DisplayName("A withdrawal stores its reason as sent and its remarks encrypted; blank remarks are not stored")
+	void saveEventStoresTheWithdrawalReasonAndEncryptedRemarks() {
+		Consent source = PrincipalFixtures.event("c-1", TestFixtures.NOW.minusSeconds(3600));
+		WithdrawalRequest change = new WithdrawalRequest(PurposeSelection.of(List.of("P-REM")), Map.of("P-REM", 1),
+				null, null, null, null, "PATIENT_REQUEST", "  Moving to another district  ");
+
+		Consent event = factory.saveEvent(BEN, EventType.WITHDRAWAL, null, source, ConsentingParty.SELF, change,
+				"key-1", "hash-1", ConsentFixtures.WORKER);
+
+		assertThat(event.getWithdrawalReason()).isEqualTo("PATIENT_REQUEST");
+		assertThat(event.getWithdrawalRemarksEncrypted()).doesNotContain("Moving");
+		assertThat(encryptor.decrypt(event.getWithdrawalRemarksEncrypted())).isEqualTo("Moving to another district");
+
+		WithdrawalRequest blank = new WithdrawalRequest(PurposeSelection.of(List.of("P-REM")), Map.of("P-REM", 1),
+				null, null, null, null, "PATIENT_REQUEST", "   ");
+		assertThat(factory.saveEvent(BEN, EventType.WITHDRAWAL, null, source, ConsentingParty.SELF, blank, "key-2",
+				"hash-2", ConsentFixtures.WORKER).getWithdrawalRemarksEncrypted()).isNull();
 	}
 
 	@Test

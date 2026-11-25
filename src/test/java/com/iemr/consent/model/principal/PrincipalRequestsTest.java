@@ -79,7 +79,7 @@ class PrincipalRequestsTest {
 
 	@Test
 	void missingFieldsAreReportedByNotNullNotByTheCrossFieldRules() {
-		assertThat(validator.validate(new WithdrawalRequest(null, null, null, null, null, null)))
+		assertThat(validator.validate(new WithdrawalRequest(null, null, null, null, null, null, null, null)))
 				.extracting(v -> v.getPropertyPath().toString()).containsExactlyInAnyOrder("purposeCodes", "versions");
 		assertThat(validator.validate(new PreferenceRequest(null, null, null, null, null, null, null, null)))
 				.extracting(v -> v.getPropertyPath().toString())
@@ -91,9 +91,27 @@ class PrincipalRequestsTest {
 	}
 
 	@Test
+	void withdrawalReasonIsACodeAndRemarksAreLimitedAndNeverPrinted() {
+		Map<String, Integer> versions = Map.of("P-REM", 1);
+		PurposeSelection rem = PurposeSelection.of(List.of("P-REM"));
+		WithdrawalRequest ok = new WithdrawalRequest(rem, versions, null, null, null, null, "PATIENT_REQUEST",
+				"Moving away");
+		assertThat(validator.validate(ok)).isEmpty();
+		assertThat(ok.toString()).contains("PATIENT_REQUEST").doesNotContain("Moving");
+		assertThat(validator.validate(new WithdrawalRequest(rem, versions, null, null, null, null, "not a code", null)))
+				.extracting(v -> v.getPropertyPath().toString()).containsExactly("reason");
+		assertThat(validator.validate(new WithdrawalRequest(rem, versions, null, null, null, null, null,
+				"x".repeat(501)))).extracting(v -> v.getPropertyPath().toString()).containsExactly("remarks");
+		assertThat(new PreferenceRequest(List.of("P-REM"), Decision.DENY, versions, null, null, null, null, null)
+				.reason()).isNull();
+		assertThat(new PreferenceRequest(List.of("P-REM"), Decision.DENY, versions, null, null, null, null, null)
+				.remarks()).isNull();
+	}
+
+	@Test
 	void crossFieldRules() {
 		assertThat(validator.validate(new WithdrawalRequest(PurposeSelection.of(List.of()), Map.of(), null, null,
-				null, null))).extracting(v -> v.getPropertyPath().toString()).containsExactly("purposeCodesValid");
+				null, null, null, null))).extracting(v -> v.getPropertyPath().toString()).containsExactly("purposeCodesValid");
 		assertThat(validator.validate(new PreferenceRequest(List.of("P-REM"), Decision.GRANT, Map.of("P-REM", 1),
 				null, null, null, null, null))).extracting(v -> v.getPropertyPath().toString())
 				.containsExactly("otpChallengeIdPresent");

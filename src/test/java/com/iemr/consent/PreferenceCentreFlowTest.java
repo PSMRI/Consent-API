@@ -369,8 +369,14 @@ class PreferenceCentreFlowTest {
 		verify(otpStore).update(challenges.get(otp).markedUsed());
 
 		String key = UUID.randomUUID().toString();
-		String withdrawal = "{\"purposeCodes\":[\"P-REM\"],\"versions\":{\"P-REM\":1}}";
+		String withdrawal = "{\"purposeCodes\":[\"P-REM\"],\"versions\":{\"P-REM\":1},"
+				+ "\"reason\":\"PATIENT_REQUEST\",\"remarks\":\"Moving away\"}";
 		JsonNode first = data(write(WORKER, BASE + "withdrawals", key, withdrawal), 200);
+		assertThat(first.at("/history/0/eventType").asText()).isEqualTo("WITHDRAWAL");
+		assertThat(first.at("/history/0/withdrawalReason").asText()).isEqualTo("PATIENT_REQUEST");
+		assertThat(first.at("/history/0/withdrawalRemarks").asText()).isEqualTo("Moving away");
+		assertThat(events.values()).filteredOn(e -> e.getEventType() == EventType.WITHDRAWAL).singleElement()
+				.satisfies(e -> assertThat(e.getWithdrawalRemarksEncrypted()).doesNotContain("Moving"));
 		assertThat(first.at("/current/2/purposeCode").asText()).isEqualTo("P-REM");
 		assertThat(first.at("/current/2/status").asText()).isEqualTo("WITHDRAWN");
 		assertThat(first.at("/current/2/versionNo").asInt()).isEqualTo(2);
@@ -384,15 +390,16 @@ class PreferenceCentreFlowTest {
 
 		mvc.perform(write(WORKER, BASE + "withdrawals", UUID.randomUUID().toString(), withdrawal))
 				.andExpect(status().isConflict()).andExpect(jsonPath("$.error.code").value("STALE_VERSION"));
-		mvc.perform(write(WORKER, BASE + "withdrawals", UUID.randomUUID().toString(),
-				"{\"purposeCodes\":[\"P-REG\"],\"versions\":{\"P-REG\":1}}")).andExpect(status().isUnprocessableEntity())
-				.andExpect(jsonPath("$.error.code").value("PURPOSE_NOT_WITHDRAWABLE"))
-				.andExpect(jsonPath("$.error.purposeCode").value("P-REG"));
+		JsonNode mandatory = data(write(WORKER, BASE + "withdrawals", UUID.randomUUID().toString(),
+				"{\"purposeCodes\":[\"P-REG\"],\"versions\":{\"P-REG\":1}}"), 200);
+		assertThat(mandatory.get("current")).as("a mandatory purpose can be withdrawn too")
+				.anySatisfy(d -> assertThat(d.get("purposeCode").asText() + ":" + d.get("status").asText())
+						.isEqualTo("P-REG:WITHDRAWN"));
 		logs.assertNoneContain("Referral follow-up", "******3210", WORKER);
 	}
 
 	@Test
-	@DisplayName("C10 / C11: grant a purpose with an OTP, then ALL withdraws what it can")
+	@DisplayName("C10 / C11: grant a purpose with an OTP, then ALL withdraws every granted purpose")
 	void grantWithOtpThenWithdrawAll() throws Exception {
 		String otp = verifiedOtp(OtpReason.CONSENT, "1001");
 		JsonNode granted = data(write(WORKER, BASE + "preferences", UUID.randomUUID().toString(),
@@ -404,8 +411,9 @@ class PreferenceCentreFlowTest {
 		verify(evidenceRepository).save(any());
 
 		JsonNode all = data(write(WORKER, BASE + "withdrawals", UUID.randomUUID().toString(),
-				"{\"purposeCodes\":\"ALL\",\"versions\":{\"P-FAM\":2,\"P-REM\":1}}"), 200);
-		assertThat(all.get("notWithdrawn").get(0).asText()).isEqualTo("P-REG");
+				"{\"purposeCodes\":\"ALL\",\"versions\":{\"P-FAM\":2,\"P-REG\":1,\"P-REM\":1}}"), 200);
+		assertThat(all.get("notWithdrawn")).isEmpty();
+		assertThat(all.get("current")).allSatisfy(d -> assertThat(d.get("status").asText()).isEqualTo("WITHDRAWN"));
 		assertThat(all.at("/current/0/status").asText()).isEqualTo("WITHDRAWN");
 		assertThat(all.at("/current/2/status").asText()).isEqualTo("WITHDRAWN");
 	}

@@ -32,6 +32,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.iemr.consent.data.consent.Consent;
 import com.iemr.consent.data.consent.ConsentPurpose;
+import com.iemr.consent.data.consent.EventType;
 import com.iemr.consent.data.consent.GuardianLink;
 import com.iemr.consent.data.evidence.ConsentEvidence;
 import com.iemr.consent.data.notice.Notice;
@@ -122,7 +123,7 @@ public class ConsentDetailServiceImpl implements ConsentDetailService {
 		ConsentDetail detail = new ConsentDetail(id, consent.getBeneficiaryRegId(), consent.getEventType(),
 				consent.getConsentingParty(), consent.getChannel(), consent.getMode(),
 				consent.getLanguageCode(), consent.getTextHash(), capture(consent), notice(consent),
-				purposeDecisions, guardian, proofs, notifier.stored(id));
+				purposeDecisions, guardian, proofs, notifier.stored(id), withdrawal(consent));
 		auditLog.append(AuditLogService.CONSENT_VIEWED, id, consent.getBeneficiaryRegId(),
 				purposeDecisions.stream().map(p -> p.purposeCode() + ":" + p.status())
 						.collect(Collectors.joining(",")),
@@ -186,6 +187,15 @@ public class ConsentDetailServiceImpl implements ConsentDetailService {
 				e.getDurationSec(), decrypt(e.getWitnessNameEncrypted()), e.getWitnessRelationship(),
 				e.getOtpStatus(), e.getMaskedPhone(), e.getDeclarationText(), e.getDeclarationWording(),
 				e.getCreatedBy(), e.getCreatedAt());
+	}
+
+	/** @return the reason and remarks of a WITHDRAWAL event; null for other events */
+	private ConsentDetail.Withdrawal withdrawal(Consent consent) {
+		if (consent.getEventType() != EventType.WITHDRAWAL) {
+			return null;
+		}
+		return new ConsentDetail.Withdrawal(consent.getWithdrawalReason(),
+				decrypt(consent.getWithdrawalRemarksEncrypted()));
 	}
 
 	private String decrypt(String encrypted) {

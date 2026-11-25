@@ -22,7 +22,6 @@
 
 package com.iemr.consent.service.principal;
 
-import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -38,11 +37,9 @@ import com.iemr.consent.data.consent.EventType;
 import com.iemr.consent.data.consent.PurposeStatus;
 import com.iemr.consent.data.grant.AccessGrant;
 import com.iemr.consent.data.grant.GrantStatus;
-import com.iemr.consent.data.notice.Purpose;
 import com.iemr.consent.model.principal.WithdrawalRequest;
 import com.iemr.consent.repository.consent.ConsentPurposeRepository;
 import com.iemr.consent.repository.grant.AccessGrantRepository;
-import com.iemr.consent.repository.notice.PurposeRepository;
 import com.iemr.consent.service.audit.AuditLogService;
 import com.iemr.consent.service.grant.AccessGrantService;
 import com.iemr.consent.utils.auth.AuthenticatedUser;
@@ -54,16 +51,14 @@ import com.iemr.consent.utils.exception.ErrorCode;
  * named decisions, record a WITHDRAWAL event with each purpose WITHDRAWN at the next version, end every
  * pending or active access grant covering a withdrawn purpose, and audit it.
  *
- * <p>Checks run in this order (research R3): no current decision (422), stale version (409), purpose
- * cannot be withdrawn (422 {@code PURPOSE_NOT_WITHDRAWABLE}), purpose not currently granted (409). The
- * consent-check cache, once it exists, is cleared after commit here (consent-check feature).</p>
+ * <p>The patient may withdraw any purpose they granted, mandatory ones included: the mandatory flag applies
+ * only when consent is taken. Checks run in this order (research R3): no current decision (422), stale
+ * version (409), purpose not currently granted (409).</p>
  */
 @Component
 public class WithdrawalWriter {
 
 	private final ConsentPurposeRepository purposeRepository;
-
-	private final PurposeRepository purposes;
 
 	private final AccessGrantRepository grantRepository;
 
@@ -75,12 +70,10 @@ public class WithdrawalWriter {
 
 	private final AuditLogService auditLogService;
 
-	public WithdrawalWriter(ConsentPurposeRepository purposeRepository, PurposeRepository purposes,
-			AccessGrantRepository grantRepository, AccessGrantService grantService,
-			PrincipalEventFactory events,
-			EffectiveStatus effectiveStatus, AuditLogService auditLogService) {
+	public WithdrawalWriter(ConsentPurposeRepository purposeRepository, AccessGrantRepository grantRepository,
+			AccessGrantService grantService, PrincipalEventFactory events, EffectiveStatus effectiveStatus,
+			AuditLogService auditLogService) {
 		this.purposeRepository = purposeRepository;
-		this.purposes = purposes;
 		this.grantRepository = grantRepository;
 		this.grantService = grantService;
 		this.events = events;
@@ -91,15 +84,9 @@ public class WithdrawalWriter {
 	@Transactional
 	public void write(Long benRegId, WithdrawalRequest request, String requestKey, String requestHash,
 			AuthenticatedUser user, String sourceIp) {
-		Set<String> codes = request.purposeCodes().all() ? withdrawableGranted(benRegId)
+		Set<String> codes = request.purposeCodes().all() ? granted(benRegId)
 				: new TreeSet<>(request.purposeCodes().codes());
 		Map<String, ConsentPurpose> rows = events.lockCurrent(benRegId, codes, request.versions());
-		Map<String, Purpose> byCode = latest(codes);
-		for (String code : codes) {
-			if (!withdrawable(byCode.get(code))) {
-				throw new ConsentApiException(ErrorCode.PURPOSE_NOT_WITHDRAWABLE, null, code, null);
-			}
-		}
 		for (ConsentPurpose row : rows.values()) {
 			if (effectiveStatus.of(row) != PurposeStatus.GRANTED) {
 				throw new ConsentApiException(ErrorCode.STATE_CONFLICT,
@@ -120,25 +107,15 @@ public class WithdrawalWriter {
 				PurposeStatus.WITHDRAWN.name(), user.userId(), sourceIp);
 	}
 
-	/** {@code ALL}: the patient's currently granted purposes that can be withdrawn. */
-	private Set<String> withdrawableGranted(Long benRegId) {
-		List<ConsentPurpose> granted = purposeRepository.findByBeneficiaryRegIdAndCurrentTrue(benRegId).stream()
-				.filter(row -> effectiveStatus.of(row) == PurposeStatus.GRANTED).toList();
-		Map<String, Purpose> byCode = latest(granted.stream().map(ConsentPurpose::getPurposeCode).toList());
-		Set<String> codes = granted.stream().map(ConsentPurpose::getPurposeCode)
-				.filter(code -> withdrawable(byCode.get(code)))
+	/** {@code ALL}: every purpose the patient currently has granted. */
+	private Set<String> granted(Long benRegId) {
+		Set<String> codes = purposeRepository.findByBeneficiaryRegIdAndCurrentTrue(benRegId).stream()
+				.filter(row -> effectiveStatus.of(row) == PurposeStatus.GRANTED)
+				.map(ConsentPurpose::getPurposeCode)
 				.collect(Collectors.toCollection(TreeSet::new));
 		if (codes.isEmpty()) {
 			throw new ConsentApiException(ErrorCode.STATE_CONFLICT, "Nothing can be withdrawn", null, null);
 		}
 		return codes;
-	}
-
-	private Map<String, Purpose> latest(Collection<String> codes) {
-		return ConsentViewMapper.latestByCode(purposes.findByPurposeCodeInAndActiveTrueAndDeletedFalse(codes));
-	}
-
-	private static boolean withdrawable(Purpose purpose) {
-		return purpose != null && purpose.isWithdrawable();
 	}
 }

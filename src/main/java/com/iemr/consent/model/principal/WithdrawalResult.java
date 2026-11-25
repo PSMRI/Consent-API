@@ -25,8 +25,8 @@ package com.iemr.consent.model.principal;
 import java.util.List;
 
 /**
- * API 11 response: the patient's consents (as API 8) and, for {@code ALL}, the granted purposes left
- * unchanged because they cannot be withdrawn.
+ * API 11 response: the patient's consents (as API 8). {@code notWithdrawn} is kept for the response shape and is
+ * always empty: every granted purpose can be withdrawn.
  */
 public record WithdrawalResult(List<CurrentDecisionView> current, List<ConsentEventView> history,
 		List<String> notWithdrawn) {

@@ -57,7 +57,7 @@ import jakarta.persistence.Column;
 import jakarta.persistence.Table;
 
 /**
- * Entities must map exactly the columns of AMRIT-DB {@code V33}–{@code V38} (data-model.md); every cm_ entity,
+ * Entities must map exactly the columns of AMRIT-DB {@code V33}–{@code V39} (data-model.md); every cm_ entity,
  * append-only ones included, carries the 12 standard AMRIT columns (feature 009). Checked by reflection, no
  * database needed.
  */
@@ -94,7 +94,8 @@ class EntityMappingTest {
 							"service_line",
 					"device_id", "call_id", "captured_at", "server_received_at",
 							"capture_time_flagged",
-					"sync_status", "project_id", "config_version", "request_key", "request_hash"),
+					"sync_status", "project_id", "config_version", "request_key", "request_hash",
+					"withdrawal_reason", "withdrawal_remarks"),
 			ConsentPurpose.class, List.of("cm_consent_purpose", "consent_purpose_id", "consent_id",
 					"beneficiary_reg_id", "purpose_code", "decision", "status", "version_no",
 							"is_current",

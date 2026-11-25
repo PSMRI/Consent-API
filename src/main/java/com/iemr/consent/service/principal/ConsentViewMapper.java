@@ -39,6 +39,7 @@ import com.iemr.consent.data.notice.Purpose;
 import com.iemr.consent.model.principal.ConsentEventView;
 import com.iemr.consent.model.principal.ConsentEventView.PurposeOutcome;
 import com.iemr.consent.model.principal.CurrentDecisionView;
+import com.iemr.consent.utils.crypto.FieldEncryptor;
 
 /** Maps stored decisions and events to the API 8 views (contract {@code PatientConsents}). */
 @Component
@@ -46,8 +47,11 @@ public class ConsentViewMapper {
 
 	private final EffectiveStatus effectiveStatus;
 
-	public ConsentViewMapper(EffectiveStatus effectiveStatus) {
+	private final FieldEncryptor encryptor;
+
+	public ConsentViewMapper(EffectiveStatus effectiveStatus, FieldEncryptor encryptor) {
 		this.effectiveStatus = effectiveStatus;
+		this.encryptor = encryptor;
 	}
 
 	/**
@@ -87,11 +91,16 @@ public class ConsentViewMapper {
 		return new PurposeOutcome(row.getPurposeCode(), row.getStatus(), row.getVersionNo());
 	}
 
-	private static ConsentEventView event(Consent e, List<PurposeOutcome> purposes) {
+	private ConsentEventView event(Consent e, List<PurposeOutcome> purposes) {
 		return new ConsentEventView(e.getConsentId(), e.getEventType(), e.getConsentingParty(),
 				e.getNoticeVersionId(), e.getLanguageCode(), e.getMode(), e.getCapturedBy(),
 				e.getCapturedAt(), e.getFacilityId(), e.getServiceLine(), e.getDeviceId(),
-				e.getSyncStatus(), purposes);
+				e.getSyncStatus(), purposes, e.getWithdrawalReason(), remarks(e));
+	}
+
+	private String remarks(Consent e) {
+		String encrypted = e.getWithdrawalRemarksEncrypted();
+		return encrypted == null ? null : encryptor.decrypt(encrypted);
 	}
 
 	private CurrentDecisionView view(ConsentPurpose row, Purpose purpose) {

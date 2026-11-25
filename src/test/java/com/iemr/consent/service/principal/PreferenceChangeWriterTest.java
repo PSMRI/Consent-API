@@ -295,12 +295,13 @@ class PreferenceChangeWriterTest {
 	}
 
 	@Test
-	void denyOfAGrantedPurposeThatCannotBeWithdrawnIsRefused() {
+	void aGrantedMandatoryPurposeCanBeTurnedOff() {
 		current(PrincipalFixtures.row("c-1", "P-REG", PurposeStatus.GRANTED, 1, null));
-		assertRefused(request(Decision.DENY, "P-REG", 1), ErrorCode.PURPOSE_NOT_WITHDRAWABLE, "P-REG");
-
-		current(PrincipalFixtures.row("c-1", "P-OLD", PurposeStatus.GRANTED, 1, null));
-		assertRefused(request(Decision.DENY, "P-OLD", 1), ErrorCode.PURPOSE_NOT_WITHDRAWABLE, "P-OLD");
+		write(request(Decision.DENY, "P-REG", 1));
+		assertThat(saved).singleElement().satisfies(row -> {
+			assertThat(row.getPurposeCode()).isEqualTo("P-REG");
+			assertThat(row.getStatus()).isEqualTo(PurposeStatus.DENIED);
+		});
 	}
 
 	@Test

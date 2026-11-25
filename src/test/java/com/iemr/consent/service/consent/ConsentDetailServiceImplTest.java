@@ -47,6 +47,7 @@ import com.iemr.consent.data.consent.Decision;
 import com.iemr.consent.data.consent.GuardianLink;
 import com.iemr.consent.data.consent.GuardianType;
 import com.iemr.consent.data.consent.GuardianVerification;
+import com.iemr.consent.data.consent.EventType;
 import com.iemr.consent.data.consent.PurposeStatus;
 import com.iemr.consent.data.evidence.ConsentEvidence;
 import com.iemr.consent.data.evidence.EvidenceType;
@@ -164,6 +165,7 @@ class ConsentDetailServiceImplTest {
 		assertThat(detail.proofs()).extracting(ConsentDetail.Proof::isFile).containsExactly(true, false);
 		assertThat(detail.proofs().get(1).declarationText()).isEqualTo(ConsentFixtures.DEFAULT_DECLARATION);
 		assertThat(detail.notification().status()).isEqualTo(NotificationStatus.SENT);
+		assertThat(detail.withdrawal()).as("not a withdrawal").isNull();
 		verify(audit).append(AuditLogService.CONSENT_VIEWED, ID, PrincipalFixtures.BEN,
 				"P-REG:GRANTED,P-REM:DENIED", "VIEWED", 42L, "10.0.0.1");
 	}
@@ -236,6 +238,22 @@ class ConsentDetailServiceImplTest {
 		assertThat(detail.purposes().get(1).current()).isFalse();
 		assertThat(detail.purposes().get(1).name()).isNull();
 		assertThat(detail.purposes().get(1).isMandatory()).isFalse();
+	}
+
+	@Test
+	void aWithdrawalShowsItsReasonAndDecryptedRemarks() {
+		Consent withdrawal = PrincipalFixtures.event(ID, AT);
+		withdrawal.setEventType(EventType.WITHDRAWAL);
+		withdrawal.setWithdrawalReason("PATIENT_REQUEST");
+		withdrawal.setWithdrawalRemarksEncrypted(encryptor.encrypt("Moving away"));
+		stored(withdrawal);
+
+		assertThat(service.detail(ID, ConsentFixtures.WORKER, "10.0.0.1").withdrawal())
+				.isEqualTo(new ConsentDetail.Withdrawal("PATIENT_REQUEST", "Moving away"));
+
+		withdrawal.setWithdrawalRemarksEncrypted(null);
+		assertThat(service.detail(ID, ConsentFixtures.WORKER, "10.0.0.1").withdrawal())
+				.isEqualTo(new ConsentDetail.Withdrawal("PATIENT_REQUEST", null));
 	}
 
 	@Test

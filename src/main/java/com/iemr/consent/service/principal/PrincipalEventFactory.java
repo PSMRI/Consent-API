@@ -142,7 +142,10 @@ public class PrincipalEventFactory {
 		return Sha256.hex(encryptor.decrypt(link.getGuardianPhoneEncrypted()));
 	}
 
-	/** Saves the new event, copying notice, language and fingerprint from the source event (R1). */
+	/**
+	 * Saves the new event, copying notice, language and fingerprint from the source event (R1). A withdrawal's
+	 * reason is stored as sent and its remarks encrypted (blank remarks are not stored).
+	 */
 	public Consent saveEvent(Long benRegId, EventType type, ConsentMode mode, Consent source, ConsentingParty party,
 			PrincipalChange change, String requestKey, String requestHash, AuthenticatedUser user) {
 		Instant now = clock.instant();
@@ -167,6 +170,9 @@ public class PrincipalEventFactory {
 		event.setSyncStatus(SyncStatus.SYNCED);
 		event.setRequestKey(requestKey);
 		event.setRequestHash(requestHash);
+		event.setWithdrawalReason(change.reason());
+		String remarks = change.remarks() == null ? "" : change.remarks().strip();
+		event.setWithdrawalRemarksEncrypted(remarks.isEmpty() ? null : encryptor.encrypt(remarks));
 		return consentRepository.saveAndFlush(event);
 	}
 

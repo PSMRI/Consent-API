@@ -41,10 +41,12 @@ import com.iemr.consent.model.principal.CurrentDecisionView;
 import com.iemr.consent.support.ConsentFixtures;
 import com.iemr.consent.support.PrincipalFixtures;
 import com.iemr.consent.support.TestFixtures;
+import com.iemr.consent.utils.crypto.FieldEncryptor;
 
 class ConsentViewMapperTest {
 
-	private final ConsentViewMapper mapper = new ConsentViewMapper(new EffectiveStatus(TestFixtures.CLOCK));
+	private final ConsentViewMapper mapper = new ConsentViewMapper(new EffectiveStatus(TestFixtures.CLOCK),
+				new FieldEncryptor(TestFixtures.consentProperties()));
 
 	@Test
 	void latestByCodeKeepsTheHighestVersion() {
@@ -93,6 +95,21 @@ class ConsentViewMapperTest {
 		assertThat(history.get(2).purposes()).isEmpty();
 		assertThat(history.get(0).capturedAt()).isEqualTo(TestFixtures.NOW);
 		assertThat(history.get(0).deviceId()).isEqualTo(newer.getDeviceId());
+		assertThat(history.get(0).withdrawalReason()).isNull();
+		assertThat(history.get(0).withdrawalRemarks()).isNull();
+	}
+
+	@Test
+	void historyShowsTheWithdrawalReasonAndDecryptedRemarks() {
+		Consent withdrawal = PrincipalFixtures.event("c-3", TestFixtures.NOW);
+		withdrawal.setWithdrawalReason("PATIENT_REQUEST");
+		withdrawal.setWithdrawalRemarksEncrypted(
+				new FieldEncryptor(TestFixtures.consentProperties()).encrypt("No longer wants reminders"));
+
+		ConsentEventView view = mapper.history(List.of(withdrawal), List.of()).get(0);
+
+		assertThat(view.withdrawalReason()).isEqualTo("PATIENT_REQUEST");
+		assertThat(view.withdrawalRemarks()).isEqualTo("No longer wants reminders");
 	}
 
 	@Test
